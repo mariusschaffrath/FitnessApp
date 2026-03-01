@@ -35,16 +35,6 @@
 			path = FitnessApp;
 			sourceTree = "<group>";
 		};
-		C1BC197A2F43727C00347E4A /* FitnessAppTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = FitnessAppTests;
-			sourceTree = "<group>";
-		};
-		C1BC19842F43727C00347E4A /* FitnessAppUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = FitnessAppUITests;
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -76,8 +66,6 @@
 			isa = PBXGroup;
 			children = (
 				C1BC196C2F43727A00347E4A /* FitnessApp */,
-				C1BC197A2F43727C00347E4A /* FitnessAppTests */,
-				C1BC19842F43727C00347E4A /* FitnessAppUITests */,
 				C1BC196B2F43727A00347E4A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -130,9 +118,6 @@
 			dependencies = (
 				C1BC19792F43727C00347E4A /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				C1BC197A2F43727C00347E4A /* FitnessAppTests */,
-			);
 			name = FitnessAppTests;
 			packageProductDependencies = (
 			);
@@ -153,9 +138,6 @@
 			dependencies = (
 				C1BC19832F43727C00347E4A /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				C1BC19842F43727C00347E4A /* FitnessAppUITests */,
-			);
 			name = FitnessAppUITests;
 			packageProductDependencies = (
 			);
@@ -171,7 +153,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2620;
-				LastUpgradeCheck = 2620;
+				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					C1BC19692F43727A00347E4A = {
 						CreatedOnToolsVersion = 26.2;
@@ -328,6 +310,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -385,6 +368,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -395,11 +379,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = FitnessApp/FitnessApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = LGZQ97NNLQ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "We need access to your health data to track your progress and show your statistics.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We need permission to save your water intake and workout data to your health records.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -427,11 +414,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = FitnessApp/FitnessApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = LGZQ97NNLQ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "We need access to your health data to track your progress and show your statistics.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We need permission to save your water intake and workout data to your health records.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
