@@ -1,11 +1,16 @@
 import SwiftUI
 import HealthKit
 import Charts
+import MapKit
+import CoreLocation
 
 struct WorkoutDetailView: View {
     let workout: Workout
     @EnvironmentObject var healthKitManager: HealthKitManager
     @State private var heartRateData: [ChartDataPoint] = []
+    @State private var workoutSteps: Double? = nil
+    @State private var routeLocations: [CLLocation] = []
+    @State private var mapPosition: MapCameraPosition = .automatic
     
     var body: some View {
         ZStack {
@@ -15,16 +20,18 @@ struct WorkoutDetailView: View {
                 VStack(alignment: .leading, spacing: 25) {
                     // Header Card
                     HStack(spacing: 20) {
-                        Image(systemName: workout.icon)
-                            .font(.system(size: 32))
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(Color.blue.gradient)
-                            .clipShape(Circle())
+                        ZStack {
+                            Circle()
+                                .fill(AppleColors.ultraOrange.gradient.opacity(0.2))
+                                .frame(width: 70, height: 70)
+                            Image(systemName: workout.icon)
+                                .font(.system(size: 32))
+                                .foregroundStyle(AppleColors.ultraOrange.gradient)
+                        }
                         
                         VStack(alignment: .leading, spacing: 4) {
                             Text(workout.activityName)
-                                .font(.system(.title, design: .rounded))
+                                .font(.system(.title2, design: .rounded))
                                 .bold()
                             Text(workout.date.formatted(date: .long, time: .shortened))
                                 .font(.subheadline)
@@ -32,44 +39,92 @@ struct WorkoutDetailView: View {
                         }
                     }
                     .padding(.horizontal)
+                    .padding(.top, 10)
                     
-                    // Stats Grid with Glass Cards
+                    // Route Map (Modern iOS 17 API)
+                    if !workout.isIndoor && !routeLocations.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Trainings-Route")
+                                .font(.system(.headline, design: .rounded))
+                                .padding(.horizontal)
+                            
+                            Map(position: $mapPosition) {
+                                MapPolyline(coordinates: routeLocations.map { $0.coordinate })
+                                    .stroke(.blue, lineWidth: 4)
+                                
+                                if let start = routeLocations.first {
+                                    Marker("Start", systemImage: "figure.run", coordinate: start.coordinate)
+                                        .tint(.green)
+                                }
+                                
+                                if let end = routeLocations.last {
+                                    Marker("Ziel", systemImage: "flag.checkered", coordinate: end.coordinate)
+                                        .tint(.red)
+                                }
+                            }
+                            .frame(height: 250)
+                            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.1), lineWidth: 1))
+                            .padding(.horizontal)
+                        }
+                    }
+                    
+                    // Stats Grid
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                        StatGlassCard(title: "Duration", value: formatDuration(workout.duration), icon: "timer", color: .green)
-                        StatGlassCard(title: "Calories", value: "\(Int(workout.calories)) kcal", icon: "flame.fill", color: .orange)
-                        StatGlassCard(title: "Distance", value: String(format: "%.2f km", workout.distance / 1000), icon: "figure.walk", color: .blue)
-                        StatGlassCard(title: "Avg HR", value: calculateAvgHR(), icon: "heart.fill", color: .red)
+                        StatGlassCard(title: "Dauer", value: formatDuration(workout.duration), icon: "timer", color: .green)
+                        StatGlassCard(title: "Kalorien", value: "\(Int(workout.calories)) kcal", icon: "flame.fill", color: .orange)
+                        StatGlassCard(title: "Distanz", value: String(format: "%.2f km", workout.distance / 1000), icon: "figure.walk", color: .blue)
+                        
+                        if let steps = workoutSteps {
+                            StatGlassCard(title: "Schritte", value: "\(Int(steps))", icon: "shoe.fill", color: .cyan)
+                        } else if workout.type == .running || workout.type == .walking {
+                            StatGlassCard(title: "Schritte", value: "Lade...", icon: "shoe.fill", color: .cyan)
+                        }
+                        
+                        StatGlassCard(title: "∅ Puls", value: calculateAvgHR(), icon: "heart.fill", color: .red)
                     }
                     .padding(.horizontal)
                     
                     // Heart Rate Section
                     VStack(alignment: .leading, spacing: 16) {
-                        Text("Heart Rate Intensity")
-                            .font(.headline)
+                        Text("Herzfrequenz-Intensität")
+                            .font(.system(.headline, design: .rounded))
                             .padding(.horizontal)
                         
                         GlassCard {
                             if heartRateData.isEmpty {
-                                Text("No heart rate samples found")
-                                    .foregroundColor(.secondary)
-                                    .frame(maxWidth: .infinity, minHeight: 150)
+                                VStack(spacing: 12) {
+                                    Image(systemName: "heart.slash.fill")
+                                        .font(.system(size: 40))
+                                        .foregroundColor(.secondary.opacity(0.3))
+                                    Text("Keine Herzfrequenz-Daten")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 180)
                             } else {
                                 Chart(heartRateData) { point in
                                     LineMark(
-                                        x: .value("Time", point.date),
+                                        x: .value("Zeit", point.date),
                                         y: .value("BPM", point.value)
                                     )
                                     .interpolationMethod(.catmullRom)
                                     .foregroundStyle(.red.gradient)
                                     
                                     AreaMark(
-                                        x: .value("Time", point.date),
+                                        x: .value("Zeit", point.date),
                                         y: .value("BPM", point.value)
                                     )
                                     .interpolationMethod(.catmullRom)
-                                    .foregroundStyle(LinearGradient(colors: [.red.opacity(0.2), .clear], startPoint: .top, endPoint: .bottom))
+                                    .foregroundStyle(LinearGradient(colors: [.red.opacity(0.3), .clear], startPoint: .top, endPoint: .bottom))
                                 }
                                 .frame(height: 200)
+                                .chartYScale(domain: .automatic(includesZero: false))
+                                .chartXAxis {
+                                    AxisMarks(values: .stride(by: .minute, count: 5)) { value in
+                                        AxisValueLabel(format: .dateTime.hour().minute())
+                                    }
+                                }
                             }
                         }
                         .padding(.horizontal)
@@ -80,9 +135,17 @@ struct WorkoutDetailView: View {
                 .padding(.vertical)
             }
         }
-        .navigationTitle("Activity Details")
+        .navigationTitle("Details")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { fetchHeartRate() }
+        .onAppear { 
+            fetchHeartRate()
+            if workout.type == .running || workout.type == .walking {
+                fetchSteps()
+            }
+            if !workout.isIndoor {
+                fetchRoute()
+            }
+        }
     }
     
     private func fetchHeartRate() {
@@ -96,6 +159,19 @@ struct WorkoutDetailView: View {
         healthKitManager.healthStore.execute(query)
     }
     
+    private func fetchSteps() {
+        healthKitManager.fetchStepsForWorkout(workout) { steps in
+            self.workoutSteps = steps
+        }
+    }
+    
+    private func fetchRoute() {
+        healthKitManager.fetchRoute(for: workout) { locations in
+            guard !locations.isEmpty else { return }
+            self.routeLocations = locations
+        }
+    }
+    
     private func calculateAvgHR() -> String {
         guard !heartRateData.isEmpty else { return "--" }
         let avg = heartRateData.map { $0.value }.reduce(0, +) / Double(heartRateData.count)
@@ -107,33 +183,5 @@ struct WorkoutDetailView: View {
         formatter.allowedUnits = [.hour, .minute, .second]
         formatter.unitsStyle = .abbreviated
         return formatter.string(from: duration) ?? ""
-    }
-}
-
-struct StatGlassCard: View {
-    let title: String
-    let value: String
-    let icon: String
-    let color: Color
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: icon)
-                    .foregroundColor(color)
-                    .font(.subheadline)
-                Text(title)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            Text(value)
-                .font(.headline)
-                .bold()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.ultraThinMaterial)
-        .cornerRadius(18)
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.1), lineWidth: 0.5))
     }
 }

@@ -385,6 +385,8 @@
 				DEVELOPMENT_TEAM = LGZQ97NNLQ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = FitnessApp;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "We need access to your health data to track your progress and show your statistics.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We need permission to save your water intake and workout data to your health records.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -420,6 +422,8 @@
 				DEVELOPMENT_TEAM = LGZQ97NNLQ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = FitnessApp;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "We need access to your health data to track your progress and show your statistics.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We need permission to save your water intake and workout data to your health records.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

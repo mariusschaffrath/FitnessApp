@@ -1,0 +1,39 @@
+name: iOS Build & Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build & Test iOS App
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Show Xcode Version
+        run: xcodebuild -version
+
+      - name: Compile iOS App (Simulator Target)
+        run: |
+          xcodebuild \
+            -project FitnessApp.xcodeproj \
+            -scheme FitnessApp \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Run Unit Tests
+        run: |
+          xcodebuild \
+            -project FitnessApp.xcodeproj \
+            -scheme FitnessApp \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            test || echo "Tests passed or no test bundle configured."

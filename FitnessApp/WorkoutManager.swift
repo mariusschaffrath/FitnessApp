@@ -1,65 +1,67 @@
 import Foundation
 import HealthKit
 
-struct Workout: Identifiable {
+struct Workout: Identifiable, Equatable {
     let id: UUID
     let type: HKWorkoutActivityType
     let duration: TimeInterval
     let calories: Double
     let distance: Double
     let date: Date
+    let isIndoor: Bool
+    var steps: Double? // Optionale Schritte für das Training
     
     var activityName: String {
+        let name: String
         switch type {
-        case .running: return "Running"
-        case .cycling: return "Cycling"
-        case .walking: return "Walking"
-        case .swimming: return "Swimming"
-        case .functionalStrengthTraining: return "Strength Training"
-        case .traditionalStrengthTraining: return "Traditional Strength"
-        case .yoga: return "Yoga"
-        case .highIntensityIntervalTraining: return "HIIT"
-        case .hiking: return "Hiking"
-        case .climbing: return "Climbing"
-        case .rowing: return "Rowing"
-        case .soccer: return "Soccer"
-        case .basketball: return "Basketball"
-        case .tennis: return "Tennis"
-        case .elliptical: return "Elliptical"
-        case .stairClimbing: return "Stair Stepper"
-        case .badminton: return "Tennis"
-        case .golf: return "Golf"
-        case .hockey: return "Hockey"
-        case .tableTennis: return "Table Tennis"
-        case .boxing: return "Boxing"
-        case .martialArts: return "Martial Arts"
-        case .pilates: return "Pilates"
-        case .dance: return "Dance"
-        case .coreTraining: return "Core"
-        case .flexibility: return "Flexibility"
-        case .crossTraining: return "Cross Training"
-        case .barre: return "Barre"
-        case .handCycling: return "Hand Cycling"
-        case .mindAndBody: return "Mind & Body"
-        case .pickleball: return "Pickleball"
-        case .socialDance: return "Social Dance"
-        case .handball: return "Handball"
-        case .squash: return "Squash"
-        case .gymnastics: return "Gymnastics"
-        case .surfingSports: return "Surfing"
-        case .sailing: return "Sailing"
-        case .skatingSports: return "Skating"
-        case .snowSports: return "Skiing/Snowboard"
-        case .paddleSports: return "Paddling"
-        default: return "Workout"
+        case .running: name = "Laufen"
+        case .cycling: name = "Radfahren"
+        case .walking: name = "Gehen"
+        case .swimming: name = "Schwimmen"
+        case .functionalStrengthTraining, .traditionalStrengthTraining: name = "Krafttraining"
+        case .yoga: name = "Yoga"
+        case .highIntensityIntervalTraining: name = "HIIT"
+        case .hiking: name = "Wandern"
+        case .climbing: name = "Klettern"
+        case .rowing: name = "Rudern"
+        case .soccer: name = "Fußball"
+        case .basketball: name = "Basketball"
+        case .tennis: name = "Tennis"
+        case .elliptical: name = "Crosstrainer"
+        case .stairClimbing: name = "Stepper"
+        case .badminton: name = "Badminton"
+        case .golf: name = "Golf"
+        case .hockey: name = "Hockey"
+        case .tableTennis: name = "Tischtennis"
+        case .boxing: name = "Boxen"
+        case .martialArts: name = "Kampfsport"
+        case .pilates: name = "Pilates"
+        case .dance, .socialDance: name = "Tanzen"
+        case .coreTraining: name = "Core"
+        case .flexibility: name = "Flexibilität"
+        case .crossTraining: name = "Cross Training"
+        case .barre: name = "Barre"
+        case .handCycling: name = "Handbike"
+        case .mindAndBody: name = "Geist & Körper"
+        case .pickleball: name = "Pickleball"
+        case .handball: name = "Handball"
+        case .squash: name = "Squash"
+        case .gymnastics: name = "Gymnastik"
+        case .surfingSports: name = "Surfen"
+        case .sailing: name = "Segeln"
+        case .skatingSports: name = "Skaten"
+        case .snowSports: name = "Wintersport"
+        case .paddleSports: name = "Paddeln"
+        default: name = "Workout"
         }
+        return name + (isIndoor ? " (Indoor)" : " (Outdoor)")
     }
     
     var icon: String {
         switch type {
-        case .running: return "figure.run"
-        case .cycling: return "figure.outdoor.cycle"
-        case .walking: return "figure.walk"
+        case .running: return isIndoor ? "figure.run" : "figure.run.circle"
+        case .cycling: return isIndoor ? "figure.indoor.cycle" : "figure.outdoor.cycle"
+        case .walking: return isIndoor ? "figure.walk.circle" : "figure.walk"
         case .swimming: return "figure.pool.swim"
         case .functionalStrengthTraining, .traditionalStrengthTraining: return "figure.strengthtraining.functional"
         case .yoga: return "figure.yoga"
@@ -99,23 +101,35 @@ struct Workout: Identifiable {
 }
 
 extension HealthKitManager {
-    func fetchRecentWorkouts(completion: @escaping ([Workout]) -> Void) {
+    func fetchRecentWorkouts(limit: Int = 25, completion: @escaping ([Workout]) -> Void) {
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
-        let query = HKSampleQuery(sampleType: .workoutType(), predicate: nil, limit: 25, sortDescriptors: [sortDescriptor]) { _, samples, error in
-            guard let samples = samples as? [HKWorkout], error == nil else {
-                completion([])
-                return
-            }
+        let query = HKSampleQuery(sampleType: .workoutType(), predicate: nil, limit: limit, sortDescriptors: [sortDescriptor]) { _, samples, error in
+            guard let samples = samples as? [HKWorkout], error == nil else { completion([]); return }
             let workouts = samples.map { hkWorkout in
                 let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!
                 let calories = hkWorkout.statistics(for: energyType)?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0
+                
+                // --- VERBESSERTE INDOOR/OUTDOOR ERKENNUNG ---
+                // Verwende String Literal für maximale Kompatibilität
+                var isIndoor = (hkWorkout.metadata?["HKWorkoutIndoor"] as? Bool)
+                
+                if isIndoor == nil {
+                    switch hkWorkout.workoutActivityType {
+                    case .hiking, .snowSports, .sailing, .surfingSports: isIndoor = false
+                    case .elliptical, .stairClimbing, .yoga, .pilates, .functionalStrengthTraining: isIndoor = true
+                    default: isIndoor = false
+                    }
+                }
+
                 return Workout(
                     id: hkWorkout.uuid,
                     type: hkWorkout.workoutActivityType,
                     duration: hkWorkout.duration,
                     calories: calories,
                     distance: hkWorkout.totalDistance?.doubleValue(for: .meter()) ?? 0,
-                    date: hkWorkout.startDate
+                    date: hkWorkout.startDate,
+                    isIndoor: isIndoor ?? false,
+                    steps: nil
                 )
             }
             DispatchQueue.main.async { completion(workouts) }
