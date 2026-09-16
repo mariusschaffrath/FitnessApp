@@ -26,8 +26,13 @@ struct ContentView: View {
     @AppStorage("exerciseGoal") var exerciseGoal: Double = 30
     @AppStorage("standGoal") var standGoal: Double = 12
     
+    @StateObject private var userSettings = UserSettingsStore()
     @State private var calendarDays: [DayActivity] = []
     @State private var selectedTab = 0
+    
+    @State private var currentBiometrics: BioMetricsSnapshot = .mock
+    @State private var coachRecommendation: CoachRecommendation = RecoveryCoach.generateRecommendation(from: .mock)
+    @State private var showCoachDetail = false
     
     @State private var showLogWater = false
     @State private var showEditGoals = false
@@ -95,6 +100,16 @@ struct ContentView: View {
                     
                     SyncStatusHeader()
                     
+                    // MARK: - Whoop-style Recovery Hero Rings
+                    RecoveryRingsView(snapshot: currentBiometrics)
+                        .padding(.horizontal, 24)
+                    
+                    // MARK: - Apple Foundation Models AI Coach Card
+                    CoachCardView(recommendation: coachRecommendation) {
+                        showCoachDetail = true
+                    }
+                    .padding(.horizontal, 24)
+                    
                     ActivityRingsHeader(calories: healthKitManager.todayCalories, calGoal: caloriesGoal, exercise: healthKitManager.todayExercise, exGoal: exerciseGoal, stand: healthKitManager.todayStand, standGoal: standGoal)
                     
                     CalendarActivityView(days: calendarDays)
@@ -112,6 +127,12 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showLogWater) { LogWaterView() }
         .sheet(isPresented: $showEditGoals) { GoalSettingsView() }
+        .sheet(isPresented: $showCoachDetail) {
+            CoachView(snapshot: currentBiometrics, recommendation: coachRecommendation)
+        }
+        .task {
+            await refreshBiometricsAndAICoach()
+        }
         .onAppear { loadCalendarData(with: healthKitManager.recentWorkouts) }
         .onChange(of: healthKitManager.recentWorkouts) { oldVal, newVal in loadCalendarData(with: newVal) }
     }
@@ -145,9 +166,20 @@ struct ContentView: View {
         }
     }
     
+    private func refreshBiometricsAndAICoach() async {
+        if #available(iOS 27.0, macOS 27.0, *) {
+            let coach = AIBioMetricsCoach()
+            let briefing = await coach.generateDailyBriefing(for: currentBiometrics)
+            self.coachRecommendation = briefing
+        } else {
+            self.coachRecommendation = RecoveryCoach.generateRecommendation(from: currentBiometrics)
+        }
+    }
+    
     private func refreshData() {
         Task {
             await healthKitManager.refreshAllData()
+            await refreshBiometricsAndAICoach()
         }
     }
     
@@ -189,7 +221,7 @@ struct GreetingSection: View {
         }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).padding(.top, 20)
     }
     private func getMotivation() -> String {
-        let progress = steps / goal
+        let progress = steps / max(1.0, goal)
         if progress >= 1.0 { return "Großartig! Ziel erreicht. 🏆" }
         if progress >= 0.75 { return "Fast geschafft! Nur noch ein paar Schritte." }
         if progress >= 0.5 { return "Halbzeit! Du bist auf einem guten Weg." }
@@ -202,9 +234,9 @@ struct ActivityRingsHeader: View {
     let calories, calGoal, exercise, exGoal, stand, standGoal: Double
     var body: some View {
         HStack(spacing: 24) {
-            ActivityRing(progress: calories / calGoal, color: AppleColors.move, icon: "flame.fill", size: 95)
-            ActivityRing(progress: exercise / exGoal, color: AppleColors.exercise, icon: "timer", size: 95)
-            ActivityRing(progress: stand / standGoal, color: AppleColors.stand, icon: "figure.stand", size: 95)
+            ActivityRing(progress: calories / max(1.0, calGoal), color: AppleColors.move, icon: "flame.fill", size: 95)
+            ActivityRing(progress: exercise / max(1.0, exGoal), color: AppleColors.exercise, icon: "timer", size: 95)
+            ActivityRing(progress: stand / max(1.0, standGoal), color: AppleColors.stand, icon: "figure.stand", size: 95)
         }.padding(.vertical, 10)
     }
 }
@@ -268,9 +300,9 @@ struct ActivityRingVisual: View {
 
     private func animate() {
         withAnimation(.spring(response: 0.6, dampingFraction: 0.7, blendDuration: 0).delay(0.2)) {
-            animMove = calories / calGoal
-            animEx = exercise / exGoal
-            animStand = stand / standGoal
+            animMove = calories / max(1.0, calGoal)
+            animEx = exercise / max(1.0, exGoal)
+            animStand = stand / max(1.0, standGoal)
         }
     }
 }
@@ -291,7 +323,7 @@ struct ActivityBreakdownCard: View {
                     ProgressRow(label: "Stehen", current: currentStand, goal: standGoal, unit: "Std", color: AppleColors.stand)
                     Divider().padding(.vertical, 4).opacity(0.5)
                     HStack {
-                        ActivityRing(progress: currentSteps / stepsGoal, color: AppleColors.steps, icon: "figure.walk", size: 55, showPercentage: false)
+                        ActivityRing(progress: currentSteps / max(1.0, stepsGoal), color: AppleColors.steps, icon: "figure.walk", size: 55, showPercentage: false)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(currentSteps.formattedWithPoints(isInteger: true)) Schritte").font(.system(.title3, design: .rounded)).bold()
                             Text("Tagesziel: \(stepsGoal.formattedWithPoints(isInteger: true))").font(.caption).foregroundColor(.secondary)
@@ -542,7 +574,7 @@ struct ProgressRow: View {
             }
             Capsule().fill(color.opacity(0.08)).frame(height: 10).overlay(
                 GeometryReader { geo in
-                    Capsule().fill(color.gradient).frame(width: geo.size.width * CGFloat(min(current / goal, 1.0)))
+                    Capsule().fill(color.gradient).frame(width: geo.size.width * CGFloat(min(current / max(1.0, goal), 1.0)))
                         .shadow(color: color.opacity(0.3), radius: 4, x: 0, y: 2)
                 }
             )

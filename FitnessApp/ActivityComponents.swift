@@ -46,7 +46,8 @@ struct ActivityRing: View {
             .frame(width: size, height: size)
             
             if showPercentage {
-                Text("\(Int(progress * 100))%")
+                let validProgress = (progress.isFinite && !progress.isNaN) ? progress : 0.0
+                Text("\(Int(validProgress * 100))%")
                     .font(.system(.footnote, design: .rounded))
                     .bold()
                     .foregroundStyle(color.opacity(0.8).gradient)
