@@ -33,6 +33,7 @@ struct ContentView: View {
     @State private var currentBiometrics: BioMetricsSnapshot = .mock
     @State private var coachRecommendation: CoachRecommendation = RecoveryCoach.generateRecommendation(from: .mock)
     @State private var showCoachDetail = false
+    @State private var showBiometricsDetail = false
     
     @State private var showLogWater = false
     @State private var showEditGoals = false
@@ -93,34 +94,73 @@ struct ContentView: View {
         ZStack {
             BackgroundView()
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 25) {
-                    GreetingSection(name: userName, steps: healthKitManager.todaySteps, goal: stepsGoal, calories: healthKitManager.todayCalories, calGoal: caloriesGoal)
+                VStack(spacing: 20) {
+                    GreetingHeader(
+                        name: userName,
+                        isSyncing: healthKitManager.isSyncing,
+                        lastSyncDate: healthKitManager.lastSyncDate,
+                        recoveryScore: currentBiometrics.recovery.score,
+                        recoveryStatus: currentBiometrics.recovery.status
+                    )
                     
-                    LiveWorkoutCard()
+                    if let active = healthKitManager.activeActivity {
+                        ActiveWorkoutBanner(
+                            workoutName: active.attributes.workoutName,
+                            workoutIcon: active.attributes.workoutIcon
+                        ) {
+                            healthKitManager.stopLiveWorkout()
+                        }
+                        .padding(.horizontal, 20)
+                    }
                     
-                    SyncStatusHeader()
+                    // MARK: - Unified Hero Rings (Bio-Balance & Activity)
+                    ActivityHeroRingsView(
+                        snapshot: currentBiometrics,
+                        calories: healthKitManager.todayCalories,
+                        calGoal: caloriesGoal,
+                        exercise: healthKitManager.todayExercise,
+                        exGoal: exerciseGoal,
+                        stand: healthKitManager.todayStand,
+                        standGoal: standGoal,
+                        onOpenDetails: { showBiometricsDetail = true }
+                    )
+                    .padding(.horizontal, 20)
                     
-                    // MARK: - Whoop-style Recovery Hero Rings
-                    RecoveryRingsView(snapshot: currentBiometrics)
-                        .padding(.horizontal, 24)
-                    
-                    // MARK: - Apple Foundation Models AI Coach Card
+                    // MARK: - Apple Foundation Models AI Coach
                     CoachCardView(recommendation: coachRecommendation) {
                         showCoachDetail = true
                     }
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, 20)
                     
-                    ActivityRingsHeader(calories: healthKitManager.todayCalories, calGoal: caloriesGoal, exercise: healthKitManager.todayExercise, exGoal: exerciseGoal, stand: healthKitManager.todayStand, standGoal: standGoal)
+                    // MARK: - Quick Metrics 2x2 Grid (Schritte, Kalorien, HRV, Ruhepuls)
+                    QuickMetricsGrid(
+                        steps: healthKitManager.todaySteps,
+                        stepsGoal: stepsGoal,
+                        calories: healthKitManager.todayCalories,
+                        caloriesGoal: caloriesGoal,
+                        hrv: currentBiometrics.recovery.hrvMs,
+                        rhr: currentBiometrics.recovery.rhrBpm,
+                        recoveryStatus: currentBiometrics.recovery.status
+                    )
                     
+                    // MARK: - Quick Action Strip (Training, Wasser, Ziele)
+                    QuickActionsRow(
+                        showLogWater: $showLogWater,
+                        showEditGoals: $showEditGoals
+                    ) { name, icon in
+                        healthKitManager.startLiveWorkout(name: name, icon: icon)
+                    }
+                    
+                    // MARK: - Wochenverlauf (7-Tage Ringe)
                     CalendarActivityView(days: calendarDays)
                     
-                    ActivityBreakdownCard(currentCalories: healthKitManager.todayCalories, caloriesGoal: caloriesGoal, currentExercise: healthKitManager.todayExercise, exerciseGoal: exerciseGoal, currentStand: healthKitManager.todayStand, standGoal: standGoal, currentSteps: healthKitManager.todaySteps, stepsGoal: stepsGoal, showEditGoals: $showEditGoals)
+                    // MARK: - Letzte Trainings
+                    RecentWorkoutsSection(
+                        workouts: healthKitManager.recentWorkouts,
+                        selectedTab: $selectedTab
+                    )
                     
-                    ActionButton(title: "Wasser loggen", icon: "drop.fill", color: .blue) { showLogWater = true }.padding(.horizontal, 24)
-                    
-                    RecentWorkoutsSection(workouts: healthKitManager.recentWorkouts, selectedTab: $selectedTab)
-                    
-                    Spacer(minLength: 100)
+                    Spacer(minLength: 80)
                 }
             }
             .navigationBarHidden(true)
@@ -130,41 +170,28 @@ struct ContentView: View {
         .sheet(isPresented: $showCoachDetail) {
             CoachView(snapshot: currentBiometrics, recommendation: coachRecommendation)
         }
+        .sheet(isPresented: $showBiometricsDetail) {
+            NavigationView {
+                ScrollView {
+                    RecoveryRingsView(snapshot: currentBiometrics)
+                        .padding()
+                }
+                .navigationTitle("BioMetrics & Balance")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Fertig") { showBiometricsDetail = false }
+                    }
+                }
+            }
+        }
         .task {
             await refreshBiometricsAndAICoach()
         }
         .onAppear { loadCalendarData(with: healthKitManager.recentWorkouts) }
         .onChange(of: healthKitManager.recentWorkouts) { oldVal, newVal in loadCalendarData(with: newVal) }
     }
-    
-    @ViewBuilder
-    private func SyncStatusHeader() -> some View {
-        if healthKitManager.isSyncing || healthKitManager.lastSyncDate != nil {
-            HStack(spacing: 8) {
-                if healthKitManager.isSyncing {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                    Text("Daten werden aktualisiert...")
-                        .font(.system(.caption, design: .rounded))
-                        .foregroundColor(.secondary)
-                } else if let lastSync = healthKitManager.lastSyncDate {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                        .font(.caption)
-                    Text("Zuletzt aktualisiert: \(lastSync.formatted(.dateTime.hour().minute()))")
-                        .font(.system(.caption, design: .rounded))
-                        .foregroundColor(.secondary)
-                }
-            }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 16)
-            .background(.ultraThinMaterial)
-            .clipShape(Capsule())
-            .padding(.horizontal, 24)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .transition(.move(edge: .top).combined(with: .opacity))
-        }
-    }
+
     
     private func refreshBiometricsAndAICoach() async {
         if #available(iOS 27.0, macOS 27.0, *) {
@@ -207,37 +234,136 @@ struct ContentView: View {
 
 // MARK: - Subsections
 
-struct GreetingSection: View {
-    let name: String; let steps: Double; let goal: Double; let calories: Double; let calGoal: Double
+struct GreetingHeader: View {
+    let name: String
+    let isSyncing: Bool
+    let lastSyncDate: Date?
+    let recoveryScore: Double
+    let recoveryStatus: RecoveryStatus
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            let hour = Calendar.current.component(.hour, from: Date())
-            let greet = hour < 12 ? "Guten Morgen" : (hour < 18 ? "Guten Tag" : "Guten Abend")
-            Text("\(greet)\(name.isEmpty ? "" : ", \(name)")").font(.system(size: 34, weight: .bold, design: .rounded))
-            HStack(spacing: 6) {
-                Image(systemName: "bolt.fill").foregroundColor(AppleColors.ultraOrange)
-                Text(getMotivation()).font(.system(.subheadline, design: .rounded)).foregroundColor(.secondary)
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(Date().formatted(date: .complete, time: .omitted).uppercased())
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundColor(.secondary)
+                    .tracking(0.5)
+                
+                let hour = Calendar.current.component(.hour, from: Date())
+                let greet = hour < 12 ? "Guten Morgen" : (hour < 18 ? "Guten Tag" : "Guten Abend")
+                Text("\(greet)\(name.isEmpty ? "" : ", \(name)")")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).padding(.top, 20)
+            
+            Spacer()
+            
+            // Status Capsule
+            HStack(spacing: 6) {
+                if isSyncing {
+                    ProgressView()
+                        .scaleEffect(0.65)
+                    Text("Sync...")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundColor(.secondary)
+                } else {
+                    Circle()
+                        .fill(recoveryColor)
+                        .frame(width: 8, height: 8)
+                    Text("\(Int(recoveryScore))% \(recoveryStatus.rawValue)")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundColor(.primary)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.ultraThinMaterial)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.5)
+            )
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 14)
     }
-    private func getMotivation() -> String {
-        let progress = steps / max(1.0, goal)
-        if progress >= 1.0 { return "Großartig! Ziel erreicht. 🏆" }
-        if progress >= 0.75 { return "Fast geschafft! Nur noch ein paar Schritte." }
-        if progress >= 0.5 { return "Halbzeit! Du bist auf einem guten Weg." }
-        if progress >= 0.25 { return "Guter Start! Bleib in Bewegung." }
-        return "Jeder Schritt bringt dich näher ans Ziel."
+    
+    private var recoveryColor: Color {
+        switch recoveryStatus {
+        case .optimal: return Color(red: 0.0, green: 0.85, blue: 0.45)
+        case .moderate: return Color(red: 1.0, green: 0.80, blue: 0.0)
+        case .low: return Color(red: 1.0, green: 0.25, blue: 0.3)
+        }
     }
 }
 
-struct ActivityRingsHeader: View {
-    let calories, calGoal, exercise, exGoal, stand, standGoal: Double
+struct ActiveWorkoutBanner: View {
+    let workoutName: String
+    let workoutIcon: String
+    let onStop: () -> Void
+    
+    @State private var isPulsing = false
+    
     var body: some View {
-        HStack(spacing: 24) {
-            ActivityRing(progress: calories / max(1.0, calGoal), color: AppleColors.move, icon: "flame.fill", size: 95)
-            ActivityRing(progress: exercise / max(1.0, exGoal), color: AppleColors.exercise, icon: "timer", size: 95)
-            ActivityRing(progress: stand / max(1.0, standGoal), color: AppleColors.stand, icon: "figure.stand", size: 95)
-        }.padding(.vertical, 10)
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(AppleColors.ultraOrange.opacity(isPulsing ? 0.3 : 0.15))
+                    .frame(width: 44, height: 44)
+                    .scaleEffect(isPulsing ? 1.08 : 1.0)
+                
+                Image(systemName: workoutIcon)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(AppleColors.ultraOrange)
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 7, height: 7)
+                    Text("LIVE WORKOUT")
+                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                        .foregroundColor(.red)
+                }
+                
+                Text(workoutName)
+                    .font(.system(.headline, design: .rounded))
+                    .bold()
+            }
+            
+            Spacer()
+            
+            Button {
+                HapticManager.shared.impact(style: .rigid)
+                onStop()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 11, weight: .bold))
+                    Text("Beenden")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.red.gradient)
+                .clipShape(Capsule())
+                .shadow(color: Color.red.opacity(0.3), radius: 4, x: 0, y: 2)
+            }
+        }
+        .padding(14)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.red.opacity(0.3), lineWidth: 1)
+        )
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                isPulsing = true
+            }
+        }
     }
 }
 
@@ -246,12 +372,23 @@ struct CalendarActivityView: View {
     let calendar = Calendar.current
     var body: some View {
         GlassCard {
-            VStack(alignment: .leading, spacing: 15) {
-                Text("Aktivität").font(.headline).bold()
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Label("Wochenverlauf", systemImage: "calendar")
+                        .font(.system(.headline, design: .rounded))
+                        .bold()
+                    Spacer()
+                    Text("7 Tage")
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundColor(.secondary)
+                }
+                
                 HStack(spacing: 0) {
                     ForEach(days) { day in
                         VStack(spacing: 8) {
-                            Text(day.date.formatted(.dateTime.weekday(.narrow))).font(.caption2).foregroundColor(.secondary)
+                            Text(day.date.formatted(.dateTime.weekday(.narrow)))
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
                             ZStack(alignment: .topTrailing) {
                                 ActivityRingVisual(calories: day.calories, calGoal: day.caloriesGoal, exercise: day.exercise, exGoal: day.exerciseGoal, stand: day.stand, standGoal: day.standGoal, size: 32)
                                 
@@ -259,8 +396,10 @@ struct CalendarActivityView: View {
                                     Circle().fill(Color.yellow).frame(width: 7, height: 7).offset(x: 3, y: -3)
                                 }
                             }
-                            Text(day.date.formatted(.dateTime.day())).font(.system(size: 10, weight: .bold))
-                        }.frame(maxWidth: .infinity)
+                            Text(day.date.formatted(.dateTime.day()))
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                        }
+                        .frame(maxWidth: .infinity)
                     }
                     if days.count < 7 {
                         ForEach(0..<(7-days.count), id: \.self) { _ in
@@ -269,7 +408,8 @@ struct CalendarActivityView: View {
                     }
                 }
             }
-        }.padding(.horizontal, 24)
+        }
+        .padding(.horizontal, 20)
     }
 }
 
@@ -306,33 +446,210 @@ struct ActivityRingVisual: View {
         }
     }
 }
-struct ActivityBreakdownCard: View {
-    let currentCalories, caloriesGoal, currentExercise, exerciseGoal, currentStand, standGoal, currentSteps, stepsGoal: Double
-    @Binding var showEditGoals: Bool
+struct QuickMetricsGrid: View {
+    let steps: Double
+    let stepsGoal: Double
+    let calories: Double
+    let caloriesGoal: Double
+    let hrv: Double
+    let rhr: Double
+    let recoveryStatus: RecoveryStatus
+    
     var body: some View {
-        GlassCard {
-            VStack(spacing: 24) {
-                HStack {
-                    Label("Details", systemImage: "list.bullet.circle.fill").font(.headline).bold()
-                    Spacer()
-                    Button { showEditGoals = true } label: { Image(systemName: "pencil.circle.fill").symbolRenderingMode(.hierarchical).font(.title2).foregroundColor(AppleColors.ultraOrange) }
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+            MetricCard(
+                title: "Schritte",
+                value: steps.formattedWithPoints(isInteger: true),
+                goalText: "Ziel: \(stepsGoal.formattedWithPoints(isInteger: true))",
+                progress: steps / max(1.0, stepsGoal),
+                icon: "shoeprints.fill",
+                color: AppleColors.steps
+            )
+            
+            MetricCard(
+                title: "Aktiv-Energie",
+                value: "\(Int(calories)) kcal",
+                goalText: "Ziel: \(Int(caloriesGoal)) kcal",
+                progress: calories / max(1.0, caloriesGoal),
+                icon: "flame.fill",
+                color: AppleColors.move
+            )
+            
+            MetricCard(
+                title: "HRV (SDNN)",
+                value: "\(Int(hrv)) ms",
+                goalText: recoveryStatus == .optimal ? "Hohe Balance" : "Regeneration",
+                progress: min(1.0, hrv / 80.0),
+                icon: "waveform.path.ecg",
+                color: .green
+            )
+            
+            MetricCard(
+                title: "Ruhepuls",
+                value: "\(Int(rhr)) bpm",
+                goalText: rhr < 60 ? "Athletisch" : "Normal",
+                progress: min(1.0, max(0.0, 1.0 - ((rhr - 45.0) / 45.0))),
+                icon: "heart.fill",
+                color: .red
+            )
+        }
+        .padding(.horizontal, 20)
+    }
+}
+
+struct MetricCard: View {
+    let title: String
+    let value: String
+    let goalText: String
+    let progress: Double
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                ZStack {
+                    Circle()
+                        .fill(color.opacity(0.12))
+                        .frame(width: 30, height: 30)
+                    Image(systemName: icon)
+                        .foregroundColor(color)
+                        .font(.system(size: 13, weight: .bold))
                 }
-                VStack(spacing: 20) {
-                    ProgressRow(label: "Bewegen", current: currentCalories, goal: caloriesGoal, unit: "kcal", color: AppleColors.move)
-                    ProgressRow(label: "Training", current: currentExercise, goal: exerciseGoal, unit: "Min", color: AppleColors.exercise)
-                    ProgressRow(label: "Stehen", current: currentStand, goal: standGoal, unit: "Std", color: AppleColors.stand)
-                    Divider().padding(.vertical, 4).opacity(0.5)
-                    HStack {
-                        ActivityRing(progress: currentSteps / max(1.0, stepsGoal), color: AppleColors.steps, icon: "figure.walk", size: 55, showPercentage: false)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(currentSteps.formattedWithPoints(isInteger: true)) Schritte").font(.system(.title3, design: .rounded)).bold()
-                            Text("Tagesziel: \(stepsGoal.formattedWithPoints(isInteger: true))").font(.caption).foregroundColor(.secondary)
-                        }
-                        Spacer()
-                    }
+                Spacer()
+                Text(goalText)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.system(size: 18, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                
+                Text(title)
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundColor(.secondary)
+                    .textCase(.uppercase)
+            }
+            
+            // Mini Progress Capsule Bar
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(color.opacity(0.12))
+                        .frame(height: 5)
+                    
+                    let validProgress = (progress.isFinite && !progress.isNaN) ? min(1.0, max(0.0, progress)) : 0.0
+                    Capsule()
+                        .fill(color.gradient)
+                        .frame(width: geo.size.width * CGFloat(validProgress), height: 5)
                 }
             }
-        }.padding(.horizontal, 24)
+            .frame(height: 5)
+        }
+        .padding(14)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
+        )
+    }
+}
+
+struct QuickActionsRow: View {
+    @Binding var showLogWater: Bool
+    @Binding var showEditGoals: Bool
+    let onStartWorkout: (String, String) -> Void
+    
+    let availableWorkouts: [(name: String, icon: String)] = [
+        ("Laufen", "figure.run"),
+        ("Radfahren", "figure.outdoor.cycle"),
+        ("Gehen", "figure.walk"),
+        ("Krafttraining", "figure.strengthtraining.traditional"),
+        ("Yoga", "figure.yoga")
+    ]
+    
+    var body: some View {
+        HStack(spacing: 10) {
+            // Quick Workout Menu
+            Menu {
+                ForEach(availableWorkouts, id: \.name) { w in
+                    Button {
+                        HapticManager.shared.impact(style: .medium)
+                        onStartWorkout(w.name, w.icon)
+                    } label: {
+                        Label(w.name, systemImage: w.icon)
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 11, weight: .bold))
+                    Text("Training")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(AppleColors.ultraOrange.gradient)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .shadow(color: AppleColors.ultraOrange.opacity(0.25), radius: 5, x: 0, y: 2)
+            }
+            
+            // Log Water Button
+            Button {
+                HapticManager.shared.impact(style: .light)
+                showLogWater = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "drop.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.blue)
+                    Text("Wasser")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundColor(.primary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // Edit Goals Button
+            Button {
+                HapticManager.shared.impact(style: .light)
+                showEditGoals = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "target")
+                        .font(.system(size: 12))
+                        .foregroundColor(AppleColors.ultraOrange)
+                    Text("Ziele")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundColor(.primary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+        .padding(.horizontal, 20)
     }
 }
 
@@ -340,9 +657,11 @@ struct RecentWorkoutsSection: View {
     let workouts: [Workout]
     @Binding var selectedTab: Int
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("Letzte Trainings").font(.system(.title2, design: .rounded)).bold()
+                Label("Letzte Trainings", systemImage: "figure.run.circle.fill")
+                    .font(.system(.headline, design: .rounded))
+                    .bold()
                 Spacer()
                 Button(action: {
                     HapticManager.shared.impact(style: .medium)
@@ -352,34 +671,35 @@ struct RecentWorkoutsSection: View {
                         .font(.system(.subheadline, design: .rounded).bold())
                         .foregroundColor(AppleColors.ultraOrange)
                 }
-            }.padding(.horizontal, 24)
+            }
+            .padding(.horizontal, 20)
             
             if workouts.isEmpty {
                 GlassCard {
                     HStack {
                         Spacer()
-                        VStack(spacing: 10) {
+                        VStack(spacing: 8) {
                             Image(systemName: "figure.walk.circle")
-                                .font(.title)
+                                .font(.title2)
                                 .foregroundColor(.secondary.opacity(0.5))
-                            Text("Noch keine Trainings")
-                                .font(.subheadline)
+                            Text("Noch keine Trainings heute")
+                                .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                         Spacer()
                     }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
             } else {
-                LazyVStack(spacing: 14) {
-                    ForEach(Array(workouts.prefix(5))) { workout in
+                LazyVStack(spacing: 12) {
+                    ForEach(Array(workouts.prefix(4))) { workout in
                         NavigationLink(destination: WorkoutDetailView(workout: workout)) {
                             WorkoutRow(workout: workout)
                         }
                         .buttonStyle(PlainButtonStyle())
                     }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 20)
             }
         }
     }
@@ -478,109 +798,6 @@ struct OnboardingAuthPage: View {
     }
 }
 
-struct LiveWorkoutCard: View {
-    @EnvironmentObject var healthKitManager: HealthKitManager
-    @State private var selectedWorkoutName = "Laufen"
-    @State private var selectedWorkoutIcon = "figure.run"
-
-    let availableWorkouts: [(name: String, icon: String)] = [
-        ("Laufen", "figure.run"),
-        ("Radfahren", "figure.outdoor.cycle"),
-        ("Gehen", "figure.walk"),
-        ("Krafttraining", "figure.strengthtraining.traditional"),
-        ("Yoga", "figure.yoga")
-    ]
-
-    var body: some View {
-        GlassCard {
-            HStack(spacing: 20) {
-                if healthKitManager.activeActivity == nil {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Bereit für ein Training?").font(.headline).bold()
-
-                        Menu {
-                            ForEach(availableWorkouts, id: \.name) { workout in
-                                Button(action: {
-                                    HapticManager.shared.selection()
-                                    selectedWorkoutName = workout.name
-                                    selectedWorkoutIcon = workout.icon
-                                }) {
-                                    Label(workout.name, systemImage: workout.icon)
-                                }
-                            }
-                        } label: {
-                            HStack {
-                                Image(systemName: selectedWorkoutIcon)
-                                Text(selectedWorkoutName)
-                                Image(systemName: "chevron.up.chevron.down").font(.caption)
-                            }
-                            .font(.subheadline)
-                            .foregroundColor(AppleColors.ultraOrange)
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 12)
-                            .background(AppleColors.ultraOrange.opacity(0.1))
-                            .clipShape(Capsule())
-                        }
-                    }
-                    Spacer()
-                    Button(action: { 
-                        HapticManager.shared.impact(style: .heavy)
-                        withAnimation { healthKitManager.startLiveWorkout(name: selectedWorkoutName, icon: selectedWorkoutIcon) } 
-                    }) {
-                        Image(systemName: "play.circle.fill").font(.system(size: 44)).symbolRenderingMode(.hierarchical).foregroundColor(AppleColors.ultraOrange)
-                    }
-                } else {
-                    HStack(spacing: 15) {
-                        ZStack { Circle().fill(AppleColors.ultraOrange.opacity(0.2)).frame(width: 44, height: 44); Image(systemName: healthKitManager.activeActivity?.attributes.workoutIcon ?? "figure.run").foregroundColor(AppleColors.ultraOrange).scaleEffect(1.2) }
-                        VStack(alignment: .leading, spacing: 2) { Text("Workout läuft").font(.headline).bold(); Text("Daten werden live übertragen...").font(.caption).foregroundColor(.secondary) }
-                    }
-                    Spacer()
-                    Button(action: { 
-                        HapticManager.shared.impact(style: .rigid)
-                        withAnimation { healthKitManager.stopLiveWorkout() } 
-                    }) {
-                        Image(systemName: "stop.circle.fill").font(.system(size: 44)).symbolRenderingMode(.hierarchical).foregroundColor(.red)
-                    }
-                }
-            }
-        }.padding(.horizontal, 24)
-    }
-}
-struct ActionButton: View {
-    let title: String; let icon: String; let color: Color; let action: () -> Void
-    var body: some View {
-        Button(action: {
-            HapticManager.shared.impact(style: .light)
-            action()
-        }) {
-            HStack {
-                Image(systemName: icon).font(.headline)
-                Text(title).font(.system(.subheadline, design: .rounded)).bold()
-            }
-            .frame(maxWidth: .infinity).padding(.vertical, 16).background(.thinMaterial).clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous)).overlay(RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.1), lineWidth: 1))
-        }.tint(AppleColors.ultraOrange)
-    }
-}
-
-struct ProgressRow: View {
-    let label: String; let current: Double; let goal: Double; let unit: String; let color: Color
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(label).font(.system(.subheadline, design: .rounded)).foregroundColor(.secondary)
-                Spacer()
-                Text("\(current.formattedWithPoints(isInteger: true))").font(.system(.body, design: .rounded)).bold()
-                Text("/ \(goal.formattedWithPoints(isInteger: true)) \(unit)").font(.system(.caption, design: .rounded)).foregroundColor(.secondary)
-            }
-            Capsule().fill(color.opacity(0.08)).frame(height: 10).overlay(
-                GeometryReader { geo in
-                    Capsule().fill(color.gradient).frame(width: geo.size.width * CGFloat(min(current / max(1.0, goal), 1.0)))
-                        .shadow(color: color.opacity(0.3), radius: 4, x: 0, y: 2)
-                }
-            )
-        }
-    }
-}
 
 struct WorkoutRow: View {
     let workout: Workout

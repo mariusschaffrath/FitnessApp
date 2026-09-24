@@ -19,8 +19,9 @@ public struct CoachCardView: View {
                         .font(.title3)
                         .foregroundColor(recommendation.readiness.color)
                     
-                    Text("Wissenschaftlicher AI Coach")
+                    Text("Daily Performance Coach")
                         .font(.headline)
+                        .bold()
                 }
                 Spacer()
                 
@@ -53,6 +54,8 @@ public struct CoachCardView: View {
                     Text(recommendation.readinessTitle)
                         .font(.subheadline)
                         .bold()
+                        .minimumScaleFactor(0.8)
+                        .lineLimit(1)
                     
                     Text("Empfohlener Strain: \(recommendation.targetStrain.formattedRange)")
                         .font(.caption)

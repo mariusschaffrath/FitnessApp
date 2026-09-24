@@ -3,13 +3,14 @@
 //  FitnessApp
 //
 //  On-Device AI Health & Recovery Coach leveraging Apple FoundationModels (iOS 27+)
-//  Provides 100% private, zero-cloud, empathetic sports science coaching synthesized
+//  Provides 100% private, zero-cloud, empathetic sports coaching synthesized
 //  directly on the Apple Neural Engine from biometric telemetry.
 //
 
 import Foundation
 import SwiftUI
 import FoundationModels
+import Combine
 
 @available(iOS 27.0, macOS 27.0, *)
 @MainActor
@@ -31,7 +32,7 @@ public final class AIBioMetricsCoach: ObservableObject {
         if systemModel.isAvailable {
             self.session = LanguageModelSession(
                 model: systemModel,
-                instructions: "Du bist ein wissenschaftlicher Erholungs- und Fitness-Coach auf Basis von Sportphysiologie (Plews et al. 2013, Banister TRIMP). Antworte prägnant, motivierend und auf Deutsch in maximal 3 Sätzen."
+                instructions: "Du bist ein erstklassiger, persönlicher Performance- und Erholungs-Coach wie bei Whoop und Apple Fitness. Antworte prägnant, motivierend, athletisch und auf Deutsch in maximal 3 Sätzen."
             )
         }
     }
@@ -39,7 +40,7 @@ public final class AIBioMetricsCoach: ObservableObject {
     // MARK: - Core Coaching Generation
     
     /// Generates a personalized coaching briefing for the day based on the physiological snapshot.
-    /// Uses Apple Foundation Models when available, falling back to deterministic literature rules.
+    /// Uses Apple Foundation Models when available, falling back to deterministic rules.
     public func generateDailyBriefing(for snapshot: BioMetricsSnapshot) async -> CoachRecommendation {
         // Fallback check: If Apple Intelligence / on-device LLM is not available
         guard systemModel.isAvailable else {
@@ -63,16 +64,6 @@ public final class AIBioMetricsCoach: ObservableObject {
             
             // Build enhanced recommendation wrapping AI insight with deterministic targets
             let deterministic = RecoveryCoach.generateRecommendation(from: snapshot)
-            var insights = deterministic.scientificInsights
-            insights.insert(
-                ScientificInsight(
-                    id: "apple_foundation_models",
-                    title: "Apple Intelligence On-Device Synthese",
-                    citation: "Apple FoundationModels (ANE Accelerated, On-Device Privacy)",
-                    detail: "Personalisierte Synthese generiert via Apple Foundation Models direkt auf der Neural Engine (100% On-Device, ohne Cloud)."
-                ),
-                at: 0
-            )
             
             let enhanced = CoachRecommendation(
                 readiness: deterministic.readiness,
@@ -81,7 +72,7 @@ public final class AIBioMetricsCoach: ObservableObject {
                 targetStrain: deterministic.targetStrain,
                 whatIsGoingWell: deterministic.whatIsGoingWell,
                 whatToImprove: deterministic.whatToImprove,
-                scientificInsights: insights
+                scientificInsights: deterministic.scientificInsights
             )
             
             self.activeRecommendation = enhanced
@@ -102,16 +93,16 @@ public final class AIBioMetricsCoach: ObservableObject {
     private func constructPhysiologicalPrompt(from snapshot: BioMetricsSnapshot) -> String {
         let statusText = snapshot.recovery.status.rawValue
         return """
-        Du bist ein erstklassiger Sportwissenschaftler und persönlicher Erholungs-Coach.
+        Du bist ein persönlicher Performance- und Erholungs-Coach.
         Analysiere folgende physiologische Daten des Nutzers für den heutigen Tag:
         
         • Erholungs-Score: \(Int(snapshot.recovery.score))% (Status: \(statusText))
-        • HRV: \(Int(snapshot.recovery.hrvMs)) ms (Z-Score Abweichung zur 7-Tage-Baseline: \(String(format: "%.2f", snapshot.recovery.hrvZScore)))
+        • HRV: \(Int(snapshot.recovery.hrvMs)) ms (Baseline-Abweichung: \(String(format: "%.2f", snapshot.recovery.hrvZScore)) SD)
         • Ruhepuls: \(Int(snapshot.recovery.rhrBpm)) bpm (Baseline: \(Int(snapshot.recovery.rhrBaselineMean)) bpm)
         • Gestriger Belastungs-Score (Strain): \(String(format: "%.1f", snapshot.strain.strainScale)) / 21.0
         • Schlafqualität: \(Int(snapshot.sleep.score))% (Dauer: \(String(format: "%.1f", snapshot.sleep.totalSleepHours))h, Tiefschlaf: \(Int(snapshot.sleep.breakdown.deepMinutes))m, REM: \(Int(snapshot.sleep.breakdown.remMinutes))m)
         
-        Erstelle eine prägnante, motivierende und empathische Tagesempfehlung (maximal 3 Sätze):
+        Erstelle eine prägnante, motivierende und athletische Tagesempfehlung (maximal 3 Sätze):
         1. Erkläre den physiologischen Hauptgrund für den heutigen Erholungswert.
         2. Gib eine konkrete Empfehlung für die heutige Trainingsintensität.
         """
@@ -128,7 +119,6 @@ public final class AIBioMetricsCoach: ObservableObject {
             }
         }
         
-        // Fallback context-aware synthetic response if session yields empty
-        return "Dein Erholungswert spiegelt die Balance aus gestriger Belastung und Schlaf wider. Dein parasympathisches Nervensystem ist gut regeneriert, sodass du heute moderat bis intensiv trainieren kannst."
+        return "Dein Erholungswert spiegelt die Balance aus gestriger Belastung und Schlaf wider. Dein Nervensystem ist gut regeneriert, sodass du heute mit voller Energie trainieren kannst."
     }
 }
