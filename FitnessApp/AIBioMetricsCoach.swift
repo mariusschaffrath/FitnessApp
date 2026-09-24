@@ -88,6 +88,9 @@ public final class AIBioMetricsCoach: ObservableObject {
         }
     }
     
+    // In-Memory Quantized Briefing Cache (verhindert ständige Neural Engine Inferenz bei minimalen Änderungen)
+    private var cachedActivityBriefing: (cacheKey: String, timestamp: Date, recommendation: CoachRecommendation)?
+    
     /// Generates a personalized coaching briefing focused on the 3 Apple Fitness rings and steps.
     public func generateDailyActivityBriefing(
         calories: Double,
@@ -99,6 +102,18 @@ public final class AIBioMetricsCoach: ObservableObject {
         steps: Double,
         stepsGoal: Double
     ) async -> CoachRecommendation {
+        let cacheKey = "\(Int(calories / 30))_\(Int(exercise / 5))_\(Int(stand))_\(Int(steps / 500))"
+        let now = Date()
+        
+        // Akku-Schutz: Wenn die Werte sich nur minimal verändert haben und die letzte Inferenz < 20 Min her ist -> Cache nutzen!
+        if let cached = cachedActivityBriefing,
+           cached.cacheKey == cacheKey,
+           now.timeIntervalSince(cached.timestamp) < 1200 {
+            self.activeRecommendation = cached.recommendation
+            self.dynamicNarrative = cached.recommendation.readinessMessage
+            return cached.recommendation
+        }
+        
         guard systemModel.isAvailable else {
             let fallback = RecoveryCoach.generateActivityRecommendation(
                 calories: calories,
@@ -154,6 +169,7 @@ public final class AIBioMetricsCoach: ObservableObject {
                 scientificInsights: deterministic.scientificInsights
             )
             
+            self.cachedActivityBriefing = (cacheKey, now, enhanced)
             self.activeRecommendation = enhanced
             self.dynamicNarrative = enhanced.readinessMessage
             return enhanced

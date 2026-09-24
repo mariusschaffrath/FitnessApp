@@ -23,6 +23,7 @@ struct StatsView: View {
     @State private var chartData: [ChartDataPoint] = []
     @State private var dateOffset: Int = 0
     @State private var selectedDate: Date?
+    @State private var chartDataCache: [String: [ChartDataPoint]] = [:]
     
     // Berechnete Werte für die Zusammenfassung
     private var totalValue: Double { chartData.reduce(0) { $0 + $1.value } }
@@ -262,7 +263,15 @@ struct StatsView: View {
         }
     }
     
-    private func fetchData() {
+    private func fetchData(force: Bool = false) {
+        let cacheKey = "\(selectedMetric.rawValue)_\(timeRange.rawValue)_\(dateOffset)"
+        
+        // Schneller Cache-Hit: Sofort ohne HealthKit-Latenz und ohne Akkuverbrauch anzeigen
+        if !force, let cached = chartDataCache[cacheKey] {
+            self.chartData = cached
+            return
+        }
+        
         let calendar = Calendar.current; let now = Date()
         var startDate: Date; var endDate: Date; let interval: DateComponents
         
@@ -291,6 +300,7 @@ struct StatsView: View {
 
         if selectedMetric == .stand {
             healthKitManager.fetchStandStatistics(startDate: startDate, endDate: endDate) { points in
+                self.chartDataCache[cacheKey] = points
                 withAnimation { self.chartData = points }
             }
             return
@@ -305,6 +315,7 @@ struct StatsView: View {
         }
         
         healthKitManager.fetchStatistics(for: typeIdentifier, startDate: startDate, endDate: endDate, interval: interval, unit: unit) { points in
+            self.chartDataCache[cacheKey] = points
             withAnimation { self.chartData = points }
         }
     }

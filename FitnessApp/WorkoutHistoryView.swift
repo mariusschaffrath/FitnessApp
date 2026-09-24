@@ -21,8 +21,9 @@ struct WorkoutHistoryView: View {
     
     @State private var sortOption: WorkoutSortOption = .date
     @State private var filterOption: WorkoutFilterOption = .all
+    @State private var displayedWorkouts: [Workout] = []
     
-    var filteredAndSortedWorkouts: [Workout] {
+    private func updateDisplayedWorkouts() {
         var result = rawWorkouts
         
         // Filter
@@ -39,7 +40,7 @@ struct WorkoutHistoryView: View {
         case .calories: result.sort { $0.calories > $1.calories }
         }
         
-        return result
+        self.displayedWorkouts = result
     }
     
     var body: some View {
@@ -106,15 +107,15 @@ struct WorkoutHistoryView: View {
                         
                         // Summary Stats
                         HStack(spacing: 15) {
-                            MiniStatCard(label: "Anzahl", value: "\(filteredAndSortedWorkouts.count)", icon: "number", color: .blue)
+                            MiniStatCard(label: "Anzahl", value: "\(displayedWorkouts.count)", icon: "number", color: .blue)
                             MiniStatCard(label: "Dauer", value: getTotalDuration(), icon: "timer", color: .green)
-                            MiniStatCard(label: "Kalorien", value: "\(Int(filteredAndSortedWorkouts.map { $0.calories }.reduce(0, +)))", icon: "flame.fill", color: .orange)
+                            MiniStatCard(label: "Kalorien", value: "\(Int(displayedWorkouts.map { $0.calories }.reduce(0, +)))", icon: "flame.fill", color: .orange)
                         }
                         .padding(.horizontal)
                         
                         // Workouts List
                         LazyVStack(spacing: 12) {
-                            if filteredAndSortedWorkouts.isEmpty {
+                            if displayedWorkouts.isEmpty {
                                 VStack(spacing: 15) {
                                     Image(systemName: "figure.run.circle")
                                         .font(.system(size: 60))
@@ -128,7 +129,7 @@ struct WorkoutHistoryView: View {
                                 }
                                 .padding(.top, 60)
                             } else {
-                                ForEach(filteredAndSortedWorkouts) { workout in
+                                ForEach(displayedWorkouts) { workout in
                                     NavigationLink(destination: WorkoutDetailView(workout: workout)) {
                                         WorkoutRow(workout: workout)
                                     }
@@ -149,6 +150,8 @@ struct WorkoutHistoryView: View {
                 .navigationBarTitleDisplayMode(.inline)
             }
             .onAppear { fetchWorkouts() }
+            .onChange(of: filterOption) { updateDisplayedWorkouts() }
+            .onChange(of: sortOption) { updateDisplayedWorkouts() }
         }
     }
     
@@ -177,8 +180,9 @@ struct WorkoutHistoryView: View {
         }
         
         healthKitManager.fetchWorkouts(from: start, to: end) { fetchedWorkouts in
+            self.rawWorkouts = fetchedWorkouts
             withAnimation(.spring()) {
-                self.rawWorkouts = fetchedWorkouts
+                self.updateDisplayedWorkouts()
             }
         }
     }
@@ -197,7 +201,7 @@ struct WorkoutHistoryView: View {
     }
     
     private func getTotalDuration() -> String {
-        let totalSeconds = filteredAndSortedWorkouts.map { $0.duration }.reduce(0, +)
+        let totalSeconds = displayedWorkouts.map { $0.duration }.reduce(0, +)
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = [.hour, .minute]
         formatter.unitsStyle = .abbreviated

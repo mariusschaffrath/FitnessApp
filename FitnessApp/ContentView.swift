@@ -189,9 +189,14 @@ struct ContentView: View {
         .onChange(of: healthKitManager.recentWorkouts) { oldVal, newVal in loadCalendarData(with: newVal) }
     }
 
+    @State private var lastAICoachTime: Date = .distantPast
     
-    private func refreshBiometricsAndAICoach() async {
-        if #available(iOS 27.0, macOS 27.0, *) {
+    private func refreshBiometricsAndAICoach(force: Bool = false) async {
+        let now = Date()
+        // Akku-Schutz: On-Device Foundation Models Neural Engine nur max. alle 15 Min befragen oder bei explizitem Force-Refresh
+        let shouldQueryAI = force || now.timeIntervalSince(lastAICoachTime) > 900
+        
+        if shouldQueryAI, #available(iOS 27.0, macOS 27.0, *) {
             let coach = AIBioMetricsCoach()
             let briefing = await coach.generateDailyActivityBriefing(
                 calories: healthKitManager.todayCalories,
@@ -204,7 +209,9 @@ struct ContentView: View {
                 stepsGoal: stepsGoal
             )
             self.coachRecommendation = briefing
+            self.lastAICoachTime = now
         } else {
+            // Extrem sparsame, deterministische Berechnung (<0.1ms, 0% Akku)
             self.coachRecommendation = RecoveryCoach.generateActivityRecommendation(
                 calories: healthKitManager.todayCalories,
                 calGoal: caloriesGoal,
@@ -218,10 +225,10 @@ struct ContentView: View {
         }
     }
     
-    private func refreshData() {
+    private func refreshData(force: Bool = false) {
         Task {
-            await healthKitManager.refreshAllData()
-            await refreshBiometricsAndAICoach()
+            await healthKitManager.refreshAllData(force: force)
+            await refreshBiometricsAndAICoach(force: force)
         }
     }
     
@@ -232,12 +239,38 @@ struct ContentView: View {
         
         for i in 0..<7 {
             let date = calendar.date(byAdding: .day, value: -6 + i, to: Date())!
-            group.enter()
-            healthKitManager.fetchActivityData(for: date) { steps, cal, ex, stand in
-                let hasW = workouts.contains(where: { calendar.isDate($0.date, inSameDayAs: date) })
-                let day = DayActivity(date: date, calories: cal, caloriesGoal: caloriesGoal, exercise: ex, exerciseGoal: exerciseGoal, stand: stand, standGoal: standGoal, hasWorkout: hasW)
+            let hasW = workouts.contains(where: { calendar.isDate($0.date, inSameDayAs: date) })
+            
+            if i == 6 {
+                // HEUTE: Sofort aus den bereits geladenen Werten von HealthKitManager bedienen (0 HealthKit-Queries)
+                let day = DayActivity(
+                    date: date,
+                    calories: healthKitManager.todayCalories,
+                    caloriesGoal: caloriesGoal,
+                    exercise: healthKitManager.todayExercise,
+                    exerciseGoal: exerciseGoal,
+                    stand: healthKitManager.todayStand,
+                    standGoal: standGoal,
+                    hasWorkout: hasW
+                )
                 days.append(day)
-                group.leave()
+            } else {
+                // Vergangene Tage: Werden durch den in-memory historicalActivityCache bedient
+                group.enter()
+                healthKitManager.fetchActivityData(for: date) { steps, cal, ex, stand in
+                    let day = DayActivity(
+                        date: date,
+                        calories: cal,
+                        caloriesGoal: caloriesGoal,
+                        exercise: ex,
+                        exerciseGoal: exerciseGoal,
+                        stand: stand,
+                        standGoal: standGoal,
+                        hasWorkout: hasW
+                    )
+                    days.append(day)
+                    group.leave()
+                }
             }
         }
         
@@ -379,9 +412,12 @@ struct ActiveWorkoutBanner: View {
                 .stroke(Color.red.opacity(0.3), lineWidth: 1)
         )
         .onAppear {
-            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                 isPulsing = true
             }
+        }
+        .onDisappear {
+            isPulsing = false
         }
     }
 }
@@ -732,16 +768,34 @@ struct BackgroundView: View {
     var body: some View {
         ZStack {
             Color(colorScheme == .dark ? .black : .white).edgesIgnoringSafeArea(.all)
-            MeshBlob(color: .blue.opacity(0.12), size: 400, offset: CGSize(width: -150, height: -350))
-            MeshBlob(color: .orange.opacity(0.12), size: 350, offset: CGSize(width: 150, height: 100))
-            MeshBlob(color: .green.opacity(0.08), size: 450, offset: CGSize(width: -50, height: 400))
+            
+            // Hardware-beschleunigte ambiente RadialGradients (verhindert teure Multi-Pass Blur Convolutions)
+            RadialGradient(
+                colors: [Color.blue.opacity(colorScheme == .dark ? 0.12 : 0.08), Color.clear],
+                center: UnitPoint(x: 0.15, y: 0.1),
+                startRadius: 20,
+                endRadius: 360
+            )
+            .edgesIgnoringSafeArea(.all)
+            
+            RadialGradient(
+                colors: [Color.orange.opacity(colorScheme == .dark ? 0.10 : 0.07), Color.clear],
+                center: UnitPoint(x: 0.85, y: 0.45),
+                startRadius: 20,
+                endRadius: 320
+            )
+            .edgesIgnoringSafeArea(.all)
+            
+            RadialGradient(
+                colors: [Color.green.opacity(colorScheme == .dark ? 0.08 : 0.05), Color.clear],
+                center: UnitPoint(x: 0.3, y: 0.85),
+                startRadius: 20,
+                endRadius: 380
+            )
+            .edgesIgnoringSafeArea(.all)
         }
+        .drawingGroup() // Flacht den Hintergrund in einen einzigen GPU-Metal-Pass ab (120 FPS Fluidität)
     }
-}
-
-struct MeshBlob: View {
-    let color: Color; let size: CGFloat; let offset: CGSize
-    var body: some View { Circle().fill(color).frame(width: size).blur(radius: 70).offset(offset) }
 }
 
 struct LoadingSplashView: View {

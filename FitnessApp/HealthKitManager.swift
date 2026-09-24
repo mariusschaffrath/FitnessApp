@@ -121,10 +121,18 @@ class HealthKitManager: ObservableObject {
     }
     
     // --- ZENTRALE REFRESH LOGIK ---
+    private var lastRefreshTimestamp: Date = .distantPast
     
     @MainActor
-    func refreshAllData() async {
+    func refreshAllData(force: Bool = false) async {
         guard isAuthorized else { return }
+        
+        let now = Date()
+        // Akku-Schutz: Wenn die Daten vor weniger als 45s synchronisiert wurden, überspringen (außer expliziter Force-Refresh)
+        if !force && now.timeIntervalSince(lastRefreshTimestamp) < 45.0 {
+            return
+        }
+        lastRefreshTimestamp = now
         self.isSyncing = true
         
         do {
@@ -181,11 +189,12 @@ class HealthKitManager: ObservableObject {
         var calories = 0
         let startTime = Date()
         
-        timer = Timer.publish(every: 2, on: .main, in: .common)
+        // Akku-Optimierung: 5 Sekunden Taktung statt 2 Sekunden spart 60% IPC- & Dynamic-Island-Wakeups
+        timer = Timer.publish(every: 5, on: .main, in: .common)
             .autoconnect()
             .sink { _ in
                 heartRate += Int.random(in: -2...5)
-                calories += Int.random(in: 1...3)
+                calories += Int.random(in: 2...5)
                 let elapsed = Date().timeIntervalSince(startTime)
                 
                 let newState = WorkoutAttributes.ContentState(
@@ -210,9 +219,20 @@ class HealthKitManager: ObservableObject {
         }
     }
     
+    // In-Memory-Cache für vergangene Tage (verhindert hunderte redundante HealthKit-Abfragen)
+    private var historicalActivityCache: [Date: (Double, Double, Double, Double)] = [:]
+    
     func fetchActivityData(for date: Date, completion: @escaping (Double, Double, Double, Double) -> Void) {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
+        let todayStart = calendar.startOfDay(for: Date())
+        
+        // Wenn es ein vergangener Tag ist und bereits im Cache liegt -> Sofort ohne HealthKit-IPC zurückgeben!
+        if startOfDay < todayStart, let cached = historicalActivityCache[startOfDay] {
+            completion(cached.0, cached.1, cached.2, cached.3)
+            return
+        }
+        
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
         let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: endOfDay, options: .strictStartDate)
         var steps: Double = 0; var calories: Double = 0; var exercise: Double = 0; var stand: Double = 0
@@ -241,7 +261,13 @@ class HealthKitManager: ObservableObject {
         }
         healthStore.execute(standQuery)
         
-        group.notify(queue: .main) { completion(steps, calories, exercise, stand) }
+        group.notify(queue: .main) { [weak self] in
+            // Vergangene Tage im Cache festhalten, da sich deren Werte nicht mehr ändern
+            if startOfDay < todayStart {
+                self?.historicalActivityCache[startOfDay] = (steps, calories, exercise, stand)
+            }
+            completion(steps, calories, exercise, stand)
+        }
     }
 
     private func startBackgroundMonitoring() {
