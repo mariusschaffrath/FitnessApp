@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Compact Glassmorphic AI Coach summary card for the main Dashboard
+/// Compact Glassmorphic AI Activity Coach summary card for the main Dashboard
 public struct CoachCardView: View {
     let recommendation: CoachRecommendation
     let onOpenCoach: () -> Void
@@ -15,11 +15,11 @@ public struct CoachCardView: View {
             // Header Row
             HStack {
                 HStack(spacing: 8) {
-                    Image(systemName: "brain.head.profile")
+                    Image(systemName: "figure.run.circle.fill")
                         .font(.title3)
                         .foregroundColor(recommendation.readiness.color)
                     
-                    Text("Daily Performance Coach")
+                    Text("Dein Aktivitäts-Coach")
                         .font(.headline)
                         .bold()
                 }
@@ -27,7 +27,7 @@ public struct CoachCardView: View {
                 
                 Button(action: onOpenCoach) {
                     HStack(spacing: 4) {
-                        Text("Details")
+                        Text("Mehr anzeigen")
                             .font(.caption)
                             .bold()
                         Image(systemName: "chevron.right")
@@ -41,7 +41,7 @@ public struct CoachCardView: View {
                 }
             }
             
-            // Readiness Status Banner
+            // Status Banner
             HStack(spacing: 12) {
                 Image(systemName: recommendation.readiness.icon)
                     .font(.system(size: 24, weight: .bold))
@@ -50,16 +50,17 @@ public struct CoachCardView: View {
                     .background(recommendation.readiness.color.opacity(0.15))
                     .clipShape(Circle())
                 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(recommendation.readinessTitle)
                         .font(.subheadline)
                         .bold()
                         .minimumScaleFactor(0.8)
                         .lineLimit(1)
                     
-                    Text("Empfohlener Strain: \(recommendation.targetStrain.formattedRange)")
+                    Text(recommendation.readinessMessage)
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .lineLimit(2)
                 }
             }
             

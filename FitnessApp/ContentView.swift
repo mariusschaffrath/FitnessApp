@@ -31,9 +31,17 @@ struct ContentView: View {
     @State private var selectedTab = 0
     
     @State private var currentBiometrics: BioMetricsSnapshot = .mock
-    @State private var coachRecommendation: CoachRecommendation = RecoveryCoach.generateRecommendation(from: .mock)
+    @State private var coachRecommendation: CoachRecommendation = RecoveryCoach.generateActivityRecommendation(
+        calories: 0,
+        calGoal: 500,
+        exercise: 0,
+        exGoal: 30,
+        stand: 0,
+        standGoal: 12,
+        steps: 0,
+        stepsGoal: 10000
+    )
     @State private var showCoachDetail = false
-    @State private var showBiometricsDetail = false
     
     @State private var showLogWater = false
     @State private var showEditGoals = false
@@ -82,7 +90,7 @@ struct ContentView: View {
     var MainLayout: some View {
         TabView(selection: $selectedTab) {
             NavigationView { SummaryTab }.tag(0).tabItem { Label("Übersicht", systemImage: "sparkles") }
-            WorkoutHistoryView().tag(1).tabItem { Label("Workouts", systemImage: "figure.run.circle.fill") }
+            WorkoutHistoryView().tag(1).tabItem { Label("Trainings", systemImage: "figure.run.circle.fill") }
             StatsView().tag(2).tabItem { Label("Trends", systemImage: "chart.line.uptrend.xyaxis") }
             NavigationView { AwardsView() }.tag(3).tabItem { Label("Erfolge", systemImage: "rosette") }
             NavigationView { SettingsView() }.tag(4).tabItem { Label("Profil", systemImage: "person.crop.circle.fill") }
@@ -99,8 +107,12 @@ struct ContentView: View {
                         name: userName,
                         isSyncing: healthKitManager.isSyncing,
                         lastSyncDate: healthKitManager.lastSyncDate,
-                        recoveryScore: currentBiometrics.recovery.score,
-                        recoveryStatus: currentBiometrics.recovery.status
+                        calories: healthKitManager.todayCalories,
+                        caloriesGoal: caloriesGoal,
+                        exercise: healthKitManager.todayExercise,
+                        exerciseGoal: exerciseGoal,
+                        stand: healthKitManager.todayStand,
+                        standGoal: standGoal
                     )
                     
                     if let active = healthKitManager.activeActivity {
@@ -113,16 +125,15 @@ struct ContentView: View {
                         .padding(.horizontal, 20)
                     }
                     
-                    // MARK: - Unified Hero Rings (Bio-Balance & Activity)
+                    // MARK: - Dedicated Activity Hero Rings (Bewegen, Trainieren, Stehen)
                     ActivityHeroRingsView(
-                        snapshot: currentBiometrics,
                         calories: healthKitManager.todayCalories,
                         calGoal: caloriesGoal,
                         exercise: healthKitManager.todayExercise,
                         exGoal: exerciseGoal,
                         stand: healthKitManager.todayStand,
                         standGoal: standGoal,
-                        onOpenDetails: { showBiometricsDetail = true }
+                        onOpenGoals: { showEditGoals = true }
                     )
                     .padding(.horizontal, 20)
                     
@@ -132,15 +143,16 @@ struct ContentView: View {
                     }
                     .padding(.horizontal, 20)
                     
-                    // MARK: - Quick Metrics 2x2 Grid (Schritte, Kalorien, HRV, Ruhepuls)
+                    // MARK: - Quick Metrics 2x2 Grid (Schritte, Bewegen, Trainieren, Stehen)
                     QuickMetricsGrid(
                         steps: healthKitManager.todaySteps,
                         stepsGoal: stepsGoal,
                         calories: healthKitManager.todayCalories,
                         caloriesGoal: caloriesGoal,
-                        hrv: currentBiometrics.recovery.hrvMs,
-                        rhr: currentBiometrics.recovery.rhrBpm,
-                        recoveryStatus: currentBiometrics.recovery.status
+                        exercise: healthKitManager.todayExercise,
+                        exerciseGoal: exerciseGoal,
+                        stand: healthKitManager.todayStand,
+                        standGoal: standGoal
                     )
                     
                     // MARK: - Quick Action Strip (Training, Wasser, Ziele)
@@ -168,22 +180,7 @@ struct ContentView: View {
         .sheet(isPresented: $showLogWater) { LogWaterView() }
         .sheet(isPresented: $showEditGoals) { GoalSettingsView() }
         .sheet(isPresented: $showCoachDetail) {
-            CoachView(snapshot: currentBiometrics, recommendation: coachRecommendation)
-        }
-        .sheet(isPresented: $showBiometricsDetail) {
-            NavigationView {
-                ScrollView {
-                    RecoveryRingsView(snapshot: currentBiometrics)
-                        .padding()
-                }
-                .navigationTitle("BioMetrics & Balance")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Fertig") { showBiometricsDetail = false }
-                    }
-                }
-            }
+            CoachView(recommendation: coachRecommendation)
         }
         .task {
             await refreshBiometricsAndAICoach()
@@ -196,10 +193,28 @@ struct ContentView: View {
     private func refreshBiometricsAndAICoach() async {
         if #available(iOS 27.0, macOS 27.0, *) {
             let coach = AIBioMetricsCoach()
-            let briefing = await coach.generateDailyBriefing(for: currentBiometrics)
+            let briefing = await coach.generateDailyActivityBriefing(
+                calories: healthKitManager.todayCalories,
+                calGoal: caloriesGoal,
+                exercise: healthKitManager.todayExercise,
+                exGoal: exerciseGoal,
+                stand: healthKitManager.todayStand,
+                standGoal: standGoal,
+                steps: healthKitManager.todaySteps,
+                stepsGoal: stepsGoal
+            )
             self.coachRecommendation = briefing
         } else {
-            self.coachRecommendation = RecoveryCoach.generateRecommendation(from: currentBiometrics)
+            self.coachRecommendation = RecoveryCoach.generateActivityRecommendation(
+                calories: healthKitManager.todayCalories,
+                calGoal: caloriesGoal,
+                exercise: healthKitManager.todayExercise,
+                exGoal: exerciseGoal,
+                stand: healthKitManager.todayStand,
+                standGoal: standGoal,
+                steps: healthKitManager.todaySteps,
+                stepsGoal: stepsGoal
+            )
         }
     }
     
@@ -238,8 +253,20 @@ struct GreetingHeader: View {
     let name: String
     let isSyncing: Bool
     let lastSyncDate: Date?
-    let recoveryScore: Double
-    let recoveryStatus: RecoveryStatus
+    let calories: Double
+    let caloriesGoal: Double
+    let exercise: Double
+    let exerciseGoal: Double
+    let stand: Double
+    let standGoal: Double
+    
+    private var closedRings: Int {
+        var count = 0
+        if calories >= caloriesGoal { count += 1 }
+        if exercise >= exerciseGoal { count += 1 }
+        if stand >= standGoal { count += 1 }
+        return count
+    }
     
     var body: some View {
         HStack(alignment: .center) {
@@ -269,9 +296,9 @@ struct GreetingHeader: View {
                         .foregroundColor(.secondary)
                 } else {
                     Circle()
-                        .fill(recoveryColor)
+                        .fill(closedRings == 3 ? Color.green : (closedRings > 0 ? AppleColors.ultraOrange : Color.secondary.opacity(0.5)))
                         .frame(width: 8, height: 8)
-                    Text("\(Int(recoveryScore))% \(recoveryStatus.rawValue)")
+                    Text(closedRings == 3 ? "3/3 Ringe 🎉" : "\(closedRings) von 3 Ringen")
                         .font(.system(size: 11, weight: .bold, design: .rounded))
                         .foregroundColor(.primary)
                 }
@@ -286,14 +313,6 @@ struct GreetingHeader: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 14)
-    }
-    
-    private var recoveryColor: Color {
-        switch recoveryStatus {
-        case .optimal: return Color(red: 0.0, green: 0.85, blue: 0.45)
-        case .moderate: return Color(red: 1.0, green: 0.80, blue: 0.0)
-        case .low: return Color(red: 1.0, green: 0.25, blue: 0.3)
-        }
     }
 }
 
@@ -322,7 +341,7 @@ struct ActiveWorkoutBanner: View {
                     Circle()
                         .fill(Color.red)
                         .frame(width: 7, height: 7)
-                    Text("LIVE WORKOUT")
+                    Text("AKTIVES TRAINING")
                         .font(.system(size: 10, weight: .heavy, design: .rounded))
                         .foregroundColor(.red)
                 }
@@ -451,9 +470,10 @@ struct QuickMetricsGrid: View {
     let stepsGoal: Double
     let calories: Double
     let caloriesGoal: Double
-    let hrv: Double
-    let rhr: Double
-    let recoveryStatus: RecoveryStatus
+    let exercise: Double
+    let exerciseGoal: Double
+    let stand: Double
+    let standGoal: Double
     
     var body: some View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
@@ -467,7 +487,7 @@ struct QuickMetricsGrid: View {
             )
             
             MetricCard(
-                title: "Aktiv-Energie",
+                title: "Bewegen",
                 value: "\(Int(calories)) kcal",
                 goalText: "Ziel: \(Int(caloriesGoal)) kcal",
                 progress: calories / max(1.0, caloriesGoal),
@@ -476,21 +496,21 @@ struct QuickMetricsGrid: View {
             )
             
             MetricCard(
-                title: "HRV (SDNN)",
-                value: "\(Int(hrv)) ms",
-                goalText: recoveryStatus == .optimal ? "Hohe Balance" : "Regeneration",
-                progress: min(1.0, hrv / 80.0),
-                icon: "waveform.path.ecg",
-                color: .green
+                title: "Trainieren",
+                value: "\(Int(exercise)) Min",
+                goalText: "Ziel: \(Int(exerciseGoal)) Min",
+                progress: exercise / max(1.0, exerciseGoal),
+                icon: "timer",
+                color: AppleColors.exercise
             )
             
             MetricCard(
-                title: "Ruhepuls",
-                value: "\(Int(rhr)) bpm",
-                goalText: rhr < 60 ? "Athletisch" : "Normal",
-                progress: min(1.0, max(0.0, 1.0 - ((rhr - 45.0) / 45.0))),
-                icon: "heart.fill",
-                color: .red
+                title: "Stehen",
+                value: "\(Int(stand)) Std",
+                goalText: "Ziel: \(Int(standGoal)) Std",
+                progress: stand / max(1.0, standGoal),
+                icon: "figure.stand",
+                color: AppleColors.stand
             )
         }
         .padding(.horizontal, 20)
@@ -901,7 +921,7 @@ struct SettingsView: View {
             
             Section {
                 Toggle(isOn: $isDarkMode) {
-                    Label("Dark Mode", systemImage: "moon.fill")
+                    Label("Dunkelmodus", systemImage: "moon.fill")
                 }
                 .tint(AppleColors.ultraOrange)
                 

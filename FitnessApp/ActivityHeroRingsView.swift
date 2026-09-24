@@ -1,69 +1,45 @@
 import SwiftUI
 
-// MARK: - Hero Ring Mode
-public enum HeroRingMode: String, CaseIterable, Identifiable {
-    case biometrics = "Bio-Balance"
-    case activity = "Aktivität"
+// MARK: - Selected Ring Enum
+public enum SelectedActivityRing: Int, CaseIterable, Identifiable {
+    case move = 0
+    case exercise = 1
+    case stand = 2
     
-    public var id: String { rawValue }
+    public var id: Int { rawValue }
 }
 
-// MARK: - Unified Hero Rings View
+// MARK: - Dedicated Activity Hero Rings View
 public struct ActivityHeroRingsView: View {
-    let snapshot: BioMetricsSnapshot
     let calories: Double
     let calGoal: Double
     let exercise: Double
     let exGoal: Double
     let stand: Double
     let standGoal: Double
-    var onOpenDetails: (() -> Void)? = nil
+    var onOpenGoals: (() -> Void)? = nil
     
-    @State private var selectedMode: HeroRingMode = .biometrics
-    @State private var selectedRingIndex: Int = 0 // 0, 1, 2
-    @Namespace private var animationNamespace
+    @State private var selectedRing: SelectedActivityRing = .move
     
     public init(
-        snapshot: BioMetricsSnapshot,
         calories: Double,
         calGoal: Double,
         exercise: Double,
         exGoal: Double,
         stand: Double,
         standGoal: Double,
-        onOpenDetails: (() -> Void)? = nil
+        onOpenGoals: (() -> Void)? = nil
     ) {
-        self.snapshot = snapshot
         self.calories = calories
         self.calGoal = max(1.0, calGoal)
         self.exercise = exercise
         self.exGoal = max(1.0, exGoal)
         self.stand = stand
         self.standGoal = max(1.0, standGoal)
-        self.onOpenDetails = onOpenDetails
+        self.onOpenGoals = onOpenGoals
     }
     
-    // Gradients for BioMetrics
-    private var recoveryColors: [Color] {
-        switch snapshot.recovery.status {
-        case .optimal:
-            return [Color(red: 0.0, green: 0.90, blue: 0.48), Color(red: 0.0, green: 0.72, blue: 0.38)]
-        case .moderate:
-            return [Color(red: 1.0, green: 0.82, blue: 0.05), Color(red: 1.0, green: 0.60, blue: 0.0)]
-        case .low:
-            return [Color(red: 1.0, green: 0.28, blue: 0.32), Color(red: 0.85, green: 0.12, blue: 0.20)]
-        }
-    }
-    
-    private var strainColors: [Color] {
-        [Color(red: 1.0, green: 0.38, blue: 0.0), Color(red: 1.0, green: 0.62, blue: 0.0)]
-    }
-    
-    private var sleepColors: [Color] {
-        [Color(red: 0.0, green: 0.88, blue: 1.0), Color(red: 0.45, green: 0.35, blue: 1.0)]
-    }
-    
-    // Gradients for Activity
+    // Gradients for Activity Rings
     private var moveColors: [Color] {
         [AppleColors.move, Color(red: 1.0, green: 0.25, blue: 0.45)]
     }
@@ -76,60 +52,53 @@ public struct ActivityHeroRingsView: View {
         [AppleColors.stand, Color(red: 0.0, green: 0.75, blue: 1.0)]
     }
     
+    private var closedRingsCount: Int {
+        var count = 0
+        if calories >= calGoal { count += 1 }
+        if exercise >= exGoal { count += 1 }
+        if stand >= standGoal { count += 1 }
+        return count
+    }
+    
     public var body: some View {
         VStack(spacing: 16) {
-            // MARK: - Header & Mode Switcher Pill
+            // MARK: - Header & Badge
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text(selectedMode == .biometrics ? "Tagesform & Balance" : "Tagesaktivität")
+                        Text("Aktivitätsringe")
                             .font(.system(.headline, design: .rounded))
                             .fontWeight(.bold)
                         
-                        if selectedMode == .biometrics, let onOpenDetails = onOpenDetails {
-                            Button(action: onOpenDetails) {
-                                Image(systemName: "info.circle")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.secondary)
+                        if let onOpenGoals = onOpenGoals {
+                            Button(action: onOpenGoals) {
+                                Image(systemName: "pencil.circle")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(AppleColors.ultraOrange)
                             }
                             .buttonStyle(PlainButtonStyle())
                         }
                     }
                     
-                    Text(selectedMode == .biometrics ? "Autonomes Nervensystem & Schlaf" : "Bewegen, Trainieren & Stehen")
+                    Text("Bewegen, Trainieren & Stehen")
                         .font(.system(.caption2, design: .rounded))
                         .foregroundColor(.secondary)
                 }
                 
                 Spacer()
                 
-                // Mode Toggle Capsule
-                HStack(spacing: 4) {
-                    ForEach(HeroRingMode.allCases) { mode in
-                        Button {
-                            HapticManager.shared.selection()
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                selectedMode = mode
-                                selectedRingIndex = 0
-                            }
-                        } label: {
-                            Text(mode.rawValue)
-                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background {
-                                    if selectedMode == mode {
-                                        Capsule()
-                                            .fill(AppleColors.ultraOrange.opacity(0.18))
-                                            .matchedGeometryEffect(id: "mode_pill", in: animationNamespace)
-                                    }
-                                }
-                                .foregroundColor(selectedMode == mode ? AppleColors.ultraOrange : .secondary)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
+                // Ring Completion Badge
+                HStack(spacing: 5) {
+                    Image(systemName: closedRingsCount == 3 ? "checkmark.seal.fill" : "flame.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(closedRingsCount == 3 ? .green : AppleColors.ultraOrange)
+                    
+                    Text(closedRingsCount == 3 ? "Alle geschlossen!" : "\(closedRingsCount) von 3 Ringen")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundColor(.primary)
                 }
-                .padding(3)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
                 .background(.ultraThinMaterial)
                 .clipShape(Capsule())
                 .overlay(
@@ -140,103 +109,57 @@ public struct ActivityHeroRingsView: View {
             
             // MARK: - Tri-Ring Display
             HStack(spacing: 10) {
-                if selectedMode == .biometrics {
-                    // Erholung Ring
-                    HeroRingUnit(
-                        title: "Erholung",
-                        valueText: "\(Int(snapshot.recovery.score))%",
-                        badgeText: snapshot.recovery.status.rawValue,
-                        progress: snapshot.recovery.score / 100.0,
-                        gradientColors: recoveryColors,
-                        iconName: "heart.fill",
-                        isSelected: selectedRingIndex == 0
-                    ) {
-                        selectRing(0)
-                    }
-                    
-                    Spacer(minLength: 0)
-                    
-                    // Belastung Ring
-                    HeroRingUnit(
-                        title: "Belastung",
-                        valueText: String(format: "%.1f", snapshot.strain.strainScale),
-                        badgeText: "\(Int(snapshot.strain.percentage))%",
-                        progress: snapshot.strain.percentage / 100.0,
-                        gradientColors: strainColors,
-                        iconName: "flame.fill",
-                        isSelected: selectedRingIndex == 1
-                    ) {
-                        selectRing(1)
-                    }
-                    
-                    Spacer(minLength: 0)
-                    
-                    // Schlaf Ring
-                    HeroRingUnit(
-                        title: "Schlaf",
-                        valueText: String(format: "%.1fh", snapshot.sleep.totalSleepHours),
-                        badgeText: "\(Int(snapshot.sleep.score))%",
-                        progress: snapshot.sleep.score / 100.0,
-                        gradientColors: sleepColors,
-                        iconName: "moon.stars.fill",
-                        isSelected: selectedRingIndex == 2
-                    ) {
-                        selectRing(2)
-                    }
-                } else {
-                    // Bewegen Ring
-                    HeroRingUnit(
-                        title: "Bewegen",
-                        valueText: "\(Int(calories))",
-                        badgeText: "/ \(Int(calGoal)) kcal",
-                        progress: calories / calGoal,
-                        gradientColors: moveColors,
-                        iconName: "flame.fill",
-                        isSelected: selectedRingIndex == 0
-                    ) {
-                        selectRing(0)
-                    }
-                    
-                    Spacer(minLength: 0)
-                    
-                    // Trainieren Ring
-                    HeroRingUnit(
-                        title: "Trainieren",
-                        valueText: "\(Int(exercise))",
-                        badgeText: "/ \(Int(exGoal)) Min",
-                        progress: exercise / exGoal,
-                        gradientColors: exerciseColors,
-                        iconName: "timer",
-                        isSelected: selectedRingIndex == 1
-                    ) {
-                        selectRing(1)
-                    }
-                    
-                    Spacer(minLength: 0)
-                    
-                    // Stehen Ring
-                    HeroRingUnit(
-                        title: "Stehen",
-                        valueText: "\(Int(stand))",
-                        badgeText: "/ \(Int(standGoal)) Std",
-                        progress: stand / standGoal,
-                        gradientColors: standColors,
-                        iconName: "figure.stand",
-                        isSelected: selectedRingIndex == 2
-                    ) {
-                        selectRing(2)
-                    }
+                // Bewegen (Kalorien)
+                HeroRingUnit(
+                    title: "Bewegen",
+                    valueText: "\(Int(calories))",
+                    badgeText: "/ \(Int(calGoal)) kcal",
+                    percentageText: "\(Int(min(999, (calories / calGoal) * 100)))%",
+                    progress: calories / calGoal,
+                    gradientColors: moveColors,
+                    iconName: "flame.fill",
+                    isSelected: selectedRing == .move
+                ) {
+                    selectRing(.move)
+                }
+                
+                Spacer(minLength: 0)
+                
+                // Trainieren (Minuten)
+                HeroRingUnit(
+                    title: "Trainieren",
+                    valueText: "\(Int(exercise))",
+                    badgeText: "/ \(Int(exGoal)) Min",
+                    percentageText: "\(Int(min(999, (exercise / exGoal) * 100)))%",
+                    progress: exercise / exGoal,
+                    gradientColors: exerciseColors,
+                    iconName: "timer",
+                    isSelected: selectedRing == .exercise
+                ) {
+                    selectRing(.exercise)
+                }
+                
+                Spacer(minLength: 0)
+                
+                // Stehen (Stunden)
+                HeroRingUnit(
+                    title: "Stehen",
+                    valueText: "\(Int(stand))",
+                    badgeText: "/ \(Int(standGoal)) Std",
+                    percentageText: "\(Int(min(999, (stand / standGoal) * 100)))%",
+                    progress: stand / standGoal,
+                    gradientColors: standColors,
+                    iconName: "figure.stand",
+                    isSelected: selectedRing == .stand
+                ) {
+                    selectRing(.stand)
                 }
             }
             .padding(.vertical, 4)
             
             // MARK: - Contextual Quick Insight Bar
             HStack(spacing: 8) {
-                if selectedMode == .biometrics {
-                    biometricInsightBar
-                } else {
-                    activityInsightBar
-                }
+                activityContextBar
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
@@ -251,79 +174,75 @@ public struct ActivityHeroRingsView: View {
         .glassCardStyle()
     }
     
-    private func selectRing(_ index: Int) {
+    private func selectRing(_ ring: SelectedActivityRing) {
         HapticManager.shared.impact(style: .light)
         withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-            selectedRingIndex = index
-        }
-    }
-    
-    // MARK: - Sub-Bars
-    @ViewBuilder
-    private var biometricInsightBar: some View {
-        switch selectedRingIndex {
-        case 0:
-            Image(systemName: "waveform.path.ecg")
-                .foregroundColor(recoveryColors.first)
-                .font(.system(size: 13, weight: .bold))
-            Text("HRV: \(Int(snapshot.recovery.hrvMs)) ms • Ruhepuls: \(Int(snapshot.recovery.rhrBpm)) bpm")
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundColor(.primary)
-            Spacer()
-            Text(snapshot.recovery.status == .optimal ? "Hohe Bereitschaft" : "Aktive Erholung")
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundColor(recoveryColors.first)
-        case 1:
-            Image(systemName: "bolt.fill")
-                .foregroundColor(strainColors.first)
-                .font(.system(size: 13, weight: .bold))
-            Text("TRIMP: \(Int(snapshot.strain.trimp)) • Aktiv: \(Int(snapshot.strain.activeCalories)) kcal")
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundColor(.primary)
-            Spacer()
-            Text("Ziel: 10–14")
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundColor(strainColors.first)
-        default:
-            Image(systemName: "bed.double.fill")
-                .foregroundColor(sleepColors.first)
-                .font(.system(size: 13, weight: .bold))
-            Text("Effizienz: \(Int(snapshot.sleep.efficiency))% • Tief: \(Int(snapshot.sleep.breakdown.deepMinutes))m")
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundColor(.primary)
-            Spacer()
-            Text(String(format: "Ziel: %.0fh", snapshot.sleep.targetSleepHours))
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundColor(sleepColors.first)
+            selectedRing = ring
         }
     }
     
     @ViewBuilder
-    private var activityInsightBar: some View {
-        let calPct = min(1.0, calories / calGoal)
-        let exPct = min(1.0, exercise / exGoal)
-        let standPct = min(1.0, stand / standGoal)
-        let closedCount = (calPct >= 1.0 ? 1 : 0) + (exPct >= 1.0 ? 1 : 0) + (standPct >= 1.0 ? 1 : 0)
-        
-        Image(systemName: closedCount == 3 ? "checkmark.seal.fill" : "chart.bar.fill")
-            .foregroundColor(closedCount == 3 ? .green : AppleColors.ultraOrange)
-            .font(.system(size: 13, weight: .bold))
-        
-        Text("\(closedCount) von 3 Ringen geschlossen")
-            .font(.system(size: 11, weight: .semibold, design: .rounded))
-            .foregroundColor(.primary)
-        
-        Spacer()
-        
-        let remainingCal = max(0, calGoal - calories)
-        if remainingCal > 0 {
-            Text("Noch \(Int(remainingCal)) kcal")
-                .font(.system(size: 10, weight: .bold, design: .rounded))
+    private var activityContextBar: some View {
+        switch selectedRing {
+        case .move:
+            let remaining = max(0, calGoal - calories)
+            Image(systemName: remaining == 0 ? "checkmark.circle.fill" : "flame.fill")
+                .foregroundColor(remaining == 0 ? .green : AppleColors.move)
+                .font(.system(size: 13, weight: .bold))
+            
+            if remaining == 0 {
+                Text("Bewegungsziel übertroffen (+ \(Int(calories - calGoal)) kcal) 🎉")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundColor(.primary)
+            } else {
+                Text("Noch \(Int(remaining)) kcal bis zum Bewegen-Ziel")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundColor(.primary)
+            }
+            Spacer()
+            Text("\(Int((calories / calGoal) * 100))%")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
                 .foregroundColor(AppleColors.move)
-        } else {
-            Text("Bewegungsziel erreicht! 🎉")
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundColor(.green)
+            
+        case .exercise:
+            let remaining = max(0, exGoal - exercise)
+            Image(systemName: remaining == 0 ? "checkmark.circle.fill" : "timer")
+                .foregroundColor(remaining == 0 ? .green : AppleColors.exercise)
+                .font(.system(size: 13, weight: .bold))
+            
+            if remaining == 0 {
+                Text("Trainingsziel erreicht (+ \(Int(exercise - exGoal)) Min) 🏆")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundColor(.primary)
+            } else {
+                Text("Noch \(Int(remaining)) Min bis zum Trainingsziel")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundColor(.primary)
+            }
+            Spacer()
+            Text("\(Int((exercise / exGoal) * 100))%")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundColor(AppleColors.exercise)
+            
+        case .stand:
+            let remaining = max(0, standGoal - stand)
+            Image(systemName: remaining == 0 ? "checkmark.circle.fill" : "figure.stand")
+                .foregroundColor(remaining == 0 ? .green : AppleColors.stand)
+                .font(.system(size: 13, weight: .bold))
+            
+            if remaining == 0 {
+                Text("Stehziel für heute erreicht! 🚶‍♂️")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundColor(.primary)
+            } else {
+                Text("Noch \(Int(remaining)) Std aufstehen und bewegen")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundColor(.primary)
+            }
+            Spacer()
+            Text("\(Int((stand / standGoal) * 100))%")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundColor(AppleColors.stand)
         }
     }
 }
@@ -333,6 +252,7 @@ public struct HeroRingUnit: View {
     let title: String
     let valueText: String
     let badgeText: String
+    let percentageText: String
     let progress: Double
     let gradientColors: [Color]
     let iconName: String
@@ -401,6 +321,10 @@ public struct HeroRingUnit: View {
                         .padding(.vertical, 2)
                         .background((gradientColors.first ?? .gray).opacity(0.12))
                         .clipShape(Capsule())
+                    
+                    Text(percentageText)
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundColor(.secondary)
                 }
             }
             .padding(.vertical, 6)
@@ -438,7 +362,6 @@ public struct HeroRingUnit: View {
     ZStack {
         BackgroundView()
         ActivityHeroRingsView(
-            snapshot: .mock,
             calories: 480,
             calGoal: 600,
             exercise: 32,

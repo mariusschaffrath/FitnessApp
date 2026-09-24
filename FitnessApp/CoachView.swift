@@ -2,10 +2,15 @@ import SwiftUI
 
 /// Full Scientific AI Coach view with readiness guidance, categorized feedback, and study insights.
 public struct CoachView: View {
-    let snapshot: BioMetricsSnapshot
     let customRecommendation: CoachRecommendation?
+    let snapshot: BioMetricsSnapshot?
     
     @State private var expandedInsightId: String? = nil
+    
+    public init(recommendation: CoachRecommendation) {
+        self.customRecommendation = recommendation
+        self.snapshot = nil
+    }
     
     public init(snapshot: BioMetricsSnapshot, recommendation: CoachRecommendation? = nil) {
         self.snapshot = snapshot
@@ -13,7 +18,15 @@ public struct CoachView: View {
     }
     
     var recommendation: CoachRecommendation {
-        customRecommendation ?? RecoveryCoach.generateRecommendation(from: snapshot)
+        if let custom = customRecommendation {
+            return custom
+        }
+        if let snap = snapshot {
+            return RecoveryCoach.generateRecommendation(from: snap)
+        }
+        return RecoveryCoach.generateActivityRecommendation(
+            calories: 500, calGoal: 500, exercise: 30, exGoal: 30, stand: 12, standGoal: 12, steps: 10000, stepsGoal: 10000
+        )
     }
     
     public var body: some View {
@@ -37,7 +50,7 @@ public struct CoachView: View {
                 }
                 .padding()
             }
-            .navigationTitle("AI Coach & Readiness")
+            .navigationTitle("Dein Aktivitäts-Coach")
         }
     }
     
@@ -61,7 +74,7 @@ public struct CoachView: View {
                         .font(.title3)
                         .bold()
                     
-                    Text("Readiness-Level: \(recommendation.readiness.rawValue)")
+                    Text("Aktivitäts-Status: \(recommendation.readiness.rawValue)")
                         .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundColor(recommendation.readiness.color)
@@ -78,7 +91,7 @@ public struct CoachView: View {
             // Target Strain Card
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Label("Empfohlenes Tagesziel (Target Strain)", systemImage: "target")
+                    Label("Empfohlenes Aktivitäts-Ziel", systemImage: "target")
                         .font(.subheadline)
                         .bold()
                         .foregroundColor(.primary)
@@ -89,22 +102,29 @@ public struct CoachView: View {
                         .foregroundColor(recommendation.readiness.color)
                 }
                 
-                // Visual Strain Range Bar
+                // Visual Strain / Activity Progress Bar
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule()
                             .fill(Color.gray.opacity(0.15))
                             .frame(height: 10)
                         
-                        let minPct = recommendation.targetStrain.minStrain / 21.0
-                        let maxPct = recommendation.targetStrain.maxStrain / 21.0
-                        let startX = geo.size.width * minPct
-                        let width = geo.size.width * (maxPct - minPct)
-                        
-                        Capsule()
-                            .fill(recommendation.readiness.color)
-                            .frame(width: max(10, width), height: 10)
-                            .offset(x: startX)
+                        if recommendation.targetStrain.maxStrain > 21.0 {
+                            let progress = min(1.0, max(0.0, recommendation.targetStrain.minStrain / max(1.0, recommendation.targetStrain.maxStrain)))
+                            Capsule()
+                                .fill(recommendation.readiness.color)
+                                .frame(width: max(10, geo.size.width * CGFloat(progress)), height: 10)
+                        } else {
+                            let minPct = min(1.0, max(0.0, recommendation.targetStrain.minStrain / 21.0))
+                            let maxPct = min(1.0, max(0.0, recommendation.targetStrain.maxStrain / 21.0))
+                            let startX = geo.size.width * minPct
+                            let width = geo.size.width * (maxPct - minPct)
+                            
+                            Capsule()
+                                .fill(recommendation.readiness.color)
+                                .frame(width: max(10, width), height: 10)
+                                .offset(x: startX)
+                        }
                     }
                 }
                 .frame(height: 10)
@@ -158,7 +178,7 @@ public struct CoachView: View {
                 Image(systemName: "arrow.up.forward.app.fill")
                     .foregroundColor(.orange)
                     .font(.title3)
-                Text("Was du verbessern kannst")
+                Text("Tipps für deine Ringe")
                     .font(.headline)
             }
             

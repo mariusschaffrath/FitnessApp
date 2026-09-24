@@ -88,6 +88,92 @@ public final class AIBioMetricsCoach: ObservableObject {
         }
     }
     
+    /// Generates a personalized coaching briefing focused on the 3 Apple Fitness rings and steps.
+    public func generateDailyActivityBriefing(
+        calories: Double,
+        calGoal: Double,
+        exercise: Double,
+        exGoal: Double,
+        stand: Double,
+        standGoal: Double,
+        steps: Double,
+        stepsGoal: Double
+    ) async -> CoachRecommendation {
+        guard systemModel.isAvailable else {
+            let fallback = RecoveryCoach.generateActivityRecommendation(
+                calories: calories,
+                calGoal: calGoal,
+                exercise: exercise,
+                exGoal: exGoal,
+                stand: stand,
+                standGoal: standGoal,
+                steps: steps,
+                stepsGoal: stepsGoal
+            )
+            self.activeRecommendation = fallback
+            self.dynamicNarrative = fallback.readinessMessage
+            self.isAppleIntelligenceActive = false
+            return fallback
+        }
+        
+        self.isAppleIntelligenceActive = true
+        self.isAnalyzing = true
+        defer { self.isAnalyzing = false }
+        
+        let prompt = constructActivityPrompt(
+            calories: calories,
+            calGoal: calGoal,
+            exercise: exercise,
+            exGoal: exGoal,
+            stand: stand,
+            standGoal: standGoal,
+            steps: steps,
+            stepsGoal: stepsGoal
+        )
+        
+        do {
+            let aiText = try await queryOnDeviceFoundationModel(prompt: prompt)
+            let deterministic = RecoveryCoach.generateActivityRecommendation(
+                calories: calories,
+                calGoal: calGoal,
+                exercise: exercise,
+                exGoal: exGoal,
+                stand: stand,
+                standGoal: standGoal,
+                steps: steps,
+                stepsGoal: stepsGoal
+            )
+            
+            let enhanced = CoachRecommendation(
+                readiness: deterministic.readiness,
+                readinessTitle: deterministic.readinessTitle,
+                readinessMessage: aiText.isEmpty ? deterministic.readinessMessage : aiText,
+                targetStrain: deterministic.targetStrain,
+                whatIsGoingWell: deterministic.whatIsGoingWell,
+                whatToImprove: deterministic.whatToImprove,
+                scientificInsights: deterministic.scientificInsights
+            )
+            
+            self.activeRecommendation = enhanced
+            self.dynamicNarrative = enhanced.readinessMessage
+            return enhanced
+        } catch {
+            let fallback = RecoveryCoach.generateActivityRecommendation(
+                calories: calories,
+                calGoal: calGoal,
+                exercise: exercise,
+                exGoal: exGoal,
+                stand: stand,
+                standGoal: standGoal,
+                steps: steps,
+                stepsGoal: stepsGoal
+            )
+            self.activeRecommendation = fallback
+            self.dynamicNarrative = fallback.readinessMessage
+            return fallback
+        }
+    }
+    
     // MARK: - Prompt Construction
     
     private func constructPhysiologicalPrompt(from snapshot: BioMetricsSnapshot) -> String {
@@ -108,6 +194,31 @@ public final class AIBioMetricsCoach: ObservableObject {
         """
     }
     
+    private func constructActivityPrompt(
+        calories: Double,
+        calGoal: Double,
+        exercise: Double,
+        exGoal: Double,
+        stand: Double,
+        standGoal: Double,
+        steps: Double,
+        stepsGoal: Double
+    ) -> String {
+        return """
+        Du bist ein erstklassiger, persönlicher Apple-Fitness- und Aktivitäts-Coach.
+        Analysiere die heutigen Aktivitätsringe und Werte des Nutzers:
+        
+        • Bewegen: \(Int(calories)) von \(Int(calGoal)) kcal (\(Int((calories / max(1.0, calGoal)) * 100))%)
+        • Trainieren: \(Int(exercise)) von \(Int(exGoal)) Min (\(Int((exercise / max(1.0, exGoal)) * 100))%)
+        • Stehen: \(Int(stand)) von \(Int(standGoal)) Std (\(Int((stand / max(1.0, standGoal)) * 100))%)
+        • Schritte: \(Int(steps)) von \(Int(stepsGoal)) Schritten
+        
+        Erstelle eine motivierende, sportliche und sympathische Tagesempfehlung (maximal 3 Sätze):
+        1. Lobe die bisher geschlossenen Ringe und die bisherige Aktivität.
+        2. Gib einen konkreten, praxistauglichen Tipp, wie die noch offenen Ringe heute geschlossen werden können.
+        """
+    }
+    
     // MARK: - On-Device Model Execution
     
     private func queryOnDeviceFoundationModel(prompt: String) async throws -> String {
@@ -119,6 +230,6 @@ public final class AIBioMetricsCoach: ObservableObject {
             }
         }
         
-        return "Dein Erholungswert spiegelt die Balance aus gestriger Belastung und Schlaf wider. Dein Nervensystem ist gut regeneriert, sodass du heute mit voller Energie trainieren kannst."
+        return "Du bist heute auf einem großartigen Weg mit deinen Aktivitätsringen. Halte den Schwung bei und schließe heute alle drei Ringe!"
     }
 }

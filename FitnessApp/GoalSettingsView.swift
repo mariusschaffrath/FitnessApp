@@ -12,17 +12,17 @@ struct GoalSettingsView: View {
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Daily Goals")) {
-                    GoalInputField(label: "Move (kcal)", value: $caloriesGoal, icon: "flame.fill", color: AppleColors.move)
-                    GoalInputField(label: "Exercise (min)", value: $exerciseGoal, icon: "timer", color: AppleColors.exercise)
-                    GoalInputField(label: "Stand (hours)", value: $standGoal, icon: "figure.stand", color: AppleColors.stand)
-                    GoalInputField(label: "Steps", value: $stepsGoal, icon: "figure.walk", color: AppleColors.steps)
+                Section(header: Text("Tagesziele")) {
+                    GoalInputField(label: "Bewegen (kcal)", value: $caloriesGoal, icon: "flame.fill", color: AppleColors.move)
+                    GoalInputField(label: "Trainieren (Minuten)", value: $exerciseGoal, icon: "timer", color: AppleColors.exercise)
+                    GoalInputField(label: "Stehen (Stunden)", value: $standGoal, icon: "figure.stand", color: AppleColors.stand)
+                    GoalInputField(label: "Schritte", value: $stepsGoal, icon: "figure.walk", color: AppleColors.steps)
                 }
             }
-            .navigationTitle("Edit Goals")
+            .navigationTitle("Ziele anpassen")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button("Fertig") { dismiss() }
                 }
             }
         }
@@ -59,16 +59,16 @@ struct LogWaterView: View {
                 Text("\(Int(amount)) ml").font(.largeTitle).bold()
                 Slider(value: $amount, in: 100...1000, step: 50).padding(.horizontal, 40)
                 HStack(spacing: 20) {
-                    Button("250ml") { amount = 250 }.buttonStyle(.bordered)
-                    Button("500ml") { amount = 500 }.buttonStyle(.bordered)
+                    Button("250 ml") { amount = 250 }.buttonStyle(.bordered)
+                    Button("500 ml") { amount = 500 }.buttonStyle(.bordered)
                 }
                 Button(action: { logWater() }) {
-                    Text("Log Water").bold().frame(maxWidth: .infinity).padding().background(Color.blue).foregroundColor(.white).cornerRadius(12)
+                    Text("Wasser speichern").bold().frame(maxWidth: .infinity).padding().background(Color.blue).foregroundColor(.white).cornerRadius(12)
                 }.padding(.horizontal, 40).padding(.top, 20)
                 Spacer()
             }
-            .navigationTitle("Log Water")
-            .toolbar { ToolbarItem(placement: .navigationBarLeading) { Button("Cancel") { dismiss() } } }
+            .navigationTitle("Wasser protokollieren")
+            .toolbar { ToolbarItem(placement: .navigationBarLeading) { Button("Abbrechen") { dismiss() } } }
         }
     }
     

@@ -29,14 +29,23 @@ public enum ReadinessLevel: String, Codable {
     }
 }
 
-/// Target Strain Range (0.0 to 21.0 Whoop scale)
+/// Target Strain Range (0.0 to 21.0 Whoop scale) or Activity Target
 public struct TargetStrainRange: Codable {
     public let minStrain: Double
     public let maxStrain: Double
     public let summary: String
     
+    public init(minStrain: Double, maxStrain: Double, summary: String) {
+        self.minStrain = minStrain
+        self.maxStrain = maxStrain
+        self.summary = summary
+    }
+    
     public var formattedRange: String {
-        String(format: "%.1f – %.1f", minStrain, maxStrain)
+        if maxStrain > 21.0 {
+            return "\(Int(minStrain)) / \(Int(maxStrain)) kcal"
+        }
+        return String(format: "%.1f – %.1f", minStrain, maxStrain)
     }
 }
 
@@ -200,6 +209,159 @@ public struct RecoveryCoach {
                 title: "Parasympathische Reaktivierung",
                 citation: "Stanley J et al. (2013). Int J Sports Physiol Perform 8(1):43-50",
                 detail: "Erholung des autonomen Nervensystems benötigt nach hochintensiven Reizen bis zu 48 Stunden. Ruhepuls und HRV sind Schlüsselindikatoren."
+            )
+        ]
+        
+        return CoachRecommendation(
+            readiness: readiness,
+            readinessTitle: readinessTitle,
+            readinessMessage: readinessMessage,
+            targetStrain: targetStrain,
+            whatIsGoingWell: goingWell,
+            whatToImprove: toImprove,
+            scientificInsights: insights
+        )
+    }
+    
+    /// Generates structured activity and ring coaching based on Bewegen, Trainieren, Stehen and Schritte.
+    public static func generateActivityRecommendation(
+        calories: Double,
+        calGoal: Double,
+        exercise: Double,
+        exGoal: Double,
+        stand: Double,
+        standGoal: Double,
+        steps: Double,
+        stepsGoal: Double
+    ) -> CoachRecommendation {
+        let validCalGoal = max(1.0, calGoal)
+        let validExGoal = max(1.0, exGoal)
+        let validStandGoal = max(1.0, standGoal)
+        let validStepsGoal = max(1.0, stepsGoal)
+        
+        let calPct = calories / validCalGoal
+        let exPct = exercise / validExGoal
+        let standPct = stand / validStandGoal
+        let stepsPct = steps / validStepsGoal
+        
+        var closedCount = 0
+        if calPct >= 1.0 { closedCount += 1 }
+        if exPct >= 1.0 { closedCount += 1 }
+        if standPct >= 1.0 { closedCount += 1 }
+        
+        let readiness: ReadinessLevel
+        let readinessTitle: String
+        let readinessMessage: String
+        
+        if closedCount == 3 {
+            readiness = .highPerformance
+            readinessTitle = "Alle 3 Ringe geschlossen! 🎉"
+            readinessMessage = "Hervorragende Leistung! Du hast deine Tagesziele für Bewegen, Trainieren und Stehen heute vollständig erreicht."
+        } else if closedCount == 2 {
+            readiness = .optimal
+            readinessTitle = "2 von 3 Ringen geschafft 💪"
+            readinessMessage = "Du bist auf einem exzellenten Weg. Schließe jetzt noch den letzten Ring, um deinen Tag perfekt zu machen."
+        } else if closedCount == 1 {
+            readiness = .moderate
+            readinessTitle = "Erster Ring geschlossen ⚡️"
+            readinessMessage = "Starker Start! Mit etwas zusätzlicher Bewegung erreichst du heute auch die weiteren Ringe."
+        } else if (calPct + exPct + standPct) / 3.0 >= 0.5 {
+            readiness = .moderate
+            readinessTitle = "Über die Hälfte geschafft 🏃‍♂️"
+            readinessMessage = "Deine Aktivitätskurve zeigt nach oben. Bleibe heute aktiv und nimm die Treppe statt den Aufzug."
+        } else {
+            readiness = .activeRecovery
+            readinessTitle = "Zeit für Aktivität 🚶‍♂️"
+            readinessMessage = "Dein Tag hat noch viel Potenzial. Starte mit einem zügigen Spaziergang oder einer kurzen Trainingseinheit."
+        }
+        
+        // Target Summary
+        let targetStrain = TargetStrainRange(
+            minStrain: calories,
+            maxStrain: validCalGoal,
+            summary: calPct >= 1.0 
+                ? "Bewegungsziel mit \(Int(calories)) von \(Int(validCalGoal)) kcal gemeistert!" 
+                : "Noch \(Int(max(0, validCalGoal - calories))) kcal bis zum Tagesziel von \(Int(validCalGoal)) kcal."
+        )
+        
+        // Was super läuft
+        var goingWell: [String] = []
+        if calPct >= 1.0 {
+            goingWell.append(String(format: "Bewegungsring übertroffen: %d von %d kcal verbrannt (+%d kcal).", Int(calories), Int(validCalGoal), Int(calories - validCalGoal)))
+        } else if calPct >= 0.75 {
+            goingWell.append(String(format: "Starker Kalorienumsatz: Bereits %d von %d kcal erreicht (%.0f%%).", Int(calories), Int(validCalGoal), calPct * 100))
+        }
+        
+        if exPct >= 1.0 {
+            goingWell.append(String(format: "Trainingsziel gemeistert: %d Minuten absolviert (Ziel: %d Min).", Int(exercise), Int(validExGoal)))
+        } else if exPct >= 0.5 {
+            goingWell.append(String(format: "Aktives Training: %d von %d Trainingsminuten abgeschlossen.", Int(exercise), Int(validExGoal)))
+        }
+        
+        if standPct >= 1.0 {
+            goingWell.append(String(format: "Stehziel voll erreicht: %d von %d Stunden mit Bewegung.", Int(stand), Int(validStandGoal)))
+        } else if standPct >= 0.6 {
+            goingWell.append(String(format: "Regelmäßiges Aufstehen: %d von %d Stehstunden verbucht.", Int(stand), Int(validStandGoal)))
+        }
+        
+        if stepsPct >= 1.0 {
+            goingWell.append(String(format: "Schrittziel erreicht: %d Schritte absolviert.", Int(steps)))
+        } else if stepsPct >= 0.7 {
+            goingWell.append(String(format: "Solide Schrittbasis: Bereits %d von %d Schritten gemacht.", Int(steps), Int(validStepsGoal)))
+        }
+        
+        if goingWell.isEmpty {
+            goingWell.append("Aktivitätsaufzeichnung aktiv – jede Bewegung heute zählt für deine Ringe.")
+        }
+        
+        // Was du verbessern kannst
+        var toImprove: [String] = []
+        if calPct < 1.0 {
+            let remCal = Int(validCalGoal - calories)
+            let walkMins = max(10, remCal / 5)
+            toImprove.append("Noch \(remCal) kcal für den Bewegungsring – ein \(walkMins)-minütiger zügiger Spaziergang schließt die Lücke.")
+        }
+        if exPct < 1.0 {
+            let remEx = Int(validExGoal - exercise)
+            toImprove.append("Noch \(remEx) Minuten Training offen. Eine kurze HIIT-Einheit, Radfahren oder Yoga bringen dich ans Ziel.")
+        }
+        if standPct < 1.0 {
+            let remStand = Int(validStandGoal - stand)
+            toImprove.append("Noch \(remStand) Stehstunden ausstehend. Versuche, jede Stunde einmal für mindestens 1 Minute aufzustehen.")
+        }
+        if stepsPct < 1.0 && stepsPct > 0.0 {
+            let remSteps = Int(validStepsGoal - steps)
+            toImprove.append("Noch \(remSteps) Schritte bis zu deinem Tages-Schrittziel.")
+        }
+        if toImprove.isEmpty {
+            toImprove.append("Großartige Leistung! Alle deine heutigen Aktivitätsziele wurden erfolgreich erreicht.")
+        }
+        
+        // Wissenschaftliche Insights zu Bewegung & Ringen
+        let insights: [ScientificInsight] = [
+            ScientificInsight(
+                id: "who_2020",
+                title: "WHO-Bewegungsrichtlinien",
+                citation: "Bull FC et al. (2020). Br J Sports Med 54(24):1451-1462",
+                detail: "Mindestens 150 bis 300 Minuten moderate Bewegung pro Woche reduzieren das Risiko für Herz-Kreislauf-Erkrankungen und stärken das Immunsystem nachhaltig."
+            ),
+            ScientificInsight(
+                id: "neat_levine",
+                title: "NEAT & Alltags-Thermogenese",
+                citation: "Levine JA (2004). Am J Physiol Endocrinol Metab 286(5):E675-85",
+                detail: "Alltägliche Nicht-Trainingsaktivität (Treppensteigen, Stehen, Gehen) macht bis zu 50% des täglichen Energieverbrauchs aus und übertrifft oft geplante Workouts."
+            ),
+            ScientificInsight(
+                id: "stand_sedentary",
+                title: "Unterbrechung von Sitzphasen",
+                citation: "Dunstan DW et al. (2012). Diabetes Care 35(5):976-983",
+                detail: "Bereits 1 bis 2 Minuten leichtes Aufstehen und Gehen pro Stunde senken den postprandialen Glukosespiegel signifikant und kurbeln den Fettstoffwechsel an."
+            ),
+            ScientificInsight(
+                id: "paluch_steps_2022",
+                title: "Schritte & Langlebigkeit",
+                citation: "Paluch AE et al. (2022). Lancet Public Health 7(3):e219-e228",
+                detail: "Tägliche Schrittzahlen zwischen 8.000 und 10.000 Schritten führen zu einer maximalen Risikominimierung für Gesamtmortalität bei Erwachsenen."
             )
         ]
         
