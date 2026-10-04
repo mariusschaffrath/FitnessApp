@@ -2,8 +2,8 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
-struct WorkoutAttributes: ActivityAttributes {
-    public struct ContentState: Codable, Hashable {
+nonisolated struct WorkoutAttributes: ActivityAttributes, Sendable {
+    public struct ContentState: Codable, Hashable, Sendable {
         // Dynamische Daten, die sich während des Workouts ändern
         var currentHeartRate: Int
         var caloriesBurned: Int

@@ -2,10 +2,10 @@ import Foundation
 import ActivityKit
 
 /// Attributes and dynamic state definition for Workout & Recovery Live Activities.
-public struct WorkoutActivityAttributes: ActivityAttributes {
+nonisolated public struct WorkoutActivityAttributes: ActivityAttributes, Sendable {
     
     /// Dynamic state updated in real-time during an active workout or recovery window.
-    public struct ContentState: Codable, Hashable {
+    public struct ContentState: Codable, Hashable, Sendable {
         public var heartRate: Double
         public var activeCalories: Double
         public var durationSeconds: TimeInterval
