@@ -2,6 +2,7 @@ import Foundation
 import HealthKit
 import Combine
 import ActivityKit
+import WidgetKit
 import CoreLocation
 
 enum HealthKitError: Error, LocalizedError {
@@ -63,12 +64,15 @@ class HealthKitManager: ObservableObject {
             return
         }
         
-        let typesToRead: Set = [
+        let typesToRead: Set<HKObjectType> = [
             HKQuantityType.quantityType(forIdentifier: .stepCount)!,
             HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!,
             HKQuantityType.quantityType(forIdentifier: .appleExerciseTime)!,
             HKQuantityType.quantityType(forIdentifier: .dietaryWater)!,
             HKQuantityType.quantityType(forIdentifier: .heartRate)!,
+            HKQuantityType.quantityType(forIdentifier: .restingHeartRate)!,
+            HKQuantityType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!,
+            HKCategoryType.categoryType(forIdentifier: .sleepAnalysis)!,
             HKCategoryType.categoryType(forIdentifier: .appleStandHour)!,
             HKSeriesType.workoutRoute(), // Route für Karten
             HKObjectType.activitySummaryType(),
@@ -270,14 +274,61 @@ class HealthKitManager: ObservableObject {
         }
     }
 
+    // MARK: - HealthKit Background Delivery & Observer Queries
+    private var activeObserverQueries: [HKObserverQuery] = []
+    
     private func startBackgroundMonitoring() {
-        let workoutType = HKObjectType.workoutType()
-        healthStore.enableBackgroundDelivery(for: workoutType, frequency: .immediate) { _, _ in }
-        let query = HKObserverQuery(sampleType: workoutType, predicate: nil) { [weak self] _, completionHandler, error in
-            if error == nil { self?.fetchLatestWorkoutAndNotify() }
-            completionHandler()
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+        
+        let sampleTypesToMonitor: [(HKSampleType, HKUpdateFrequency)] = [
+            (HKObjectType.workoutType(), .immediate),
+            (HKCategoryType.categoryType(forIdentifier: .sleepAnalysis)!, .immediate),
+            (HKQuantityType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!, .immediate),
+            (HKQuantityType.quantityType(forIdentifier: .restingHeartRate)!, .hourly),
+            (HKQuantityType.quantityType(forIdentifier: .stepCount)!, .hourly),
+            (HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!, .hourly)
+        ]
+        
+        for (sampleType, frequency) in sampleTypesToMonitor {
+            healthStore.enableBackgroundDelivery(for: sampleType, frequency: frequency) { success, error in
+                if let error = error {
+                    print("⚠️ HealthKit Background Delivery Fehler für \(sampleType.identifier): \(error.localizedDescription)")
+                } else if success {
+                    print("✅ HealthKit Background Delivery aktiv für \(sampleType.identifier)")
+                }
+            }
+            
+            let query = HKObserverQuery(sampleType: sampleType, predicate: nil) { [weak self] _, completionHandler, error in
+                guard error == nil else {
+                    completionHandler()
+                    return
+                }
+                
+                print("🔄 HealthKit Observer Query getriggert für \(sampleType.identifier)")
+                
+                Task { @MainActor [weak self] in
+                    guard let self = self else {
+                        completionHandler()
+                        return
+                    }
+                    
+                    if sampleType == HKObjectType.workoutType() {
+                        self.fetchLatestWorkoutAndNotify()
+                    }
+                    
+                    // Daten aktualisieren
+                    await self.refreshAllData(force: true)
+                    
+                    // WidgetKit Timelines synchronisieren
+                    WidgetCenter.shared.reloadAllTimelines()
+                    
+                    completionHandler()
+                }
+            }
+            
+            activeObserverQueries.append(query)
+            healthStore.execute(query)
         }
-        healthStore.execute(query)
     }
     
     private func fetchLatestWorkoutAndNotify() {
