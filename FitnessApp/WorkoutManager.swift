@@ -1,16 +1,33 @@
 import Foundation
 import HealthKit
 
+/// Universal workout data model wrapping Apple HealthKit's HKWorkout.
 struct Workout: Identifiable, Equatable {
+    /// Unique identifier from the underlying HKWorkout sample.
     let id: UUID
-    let type: HKWorkoutActivityType
-    let duration: TimeInterval
-    let calories: Double
-    let distance: Double
-    let date: Date
-    let isIndoor: Bool
-    var steps: Double? // Optionale Schritte für das Training
     
+    /// Apple Health activity type (e.g. running, cycling, functionalStrengthTraining).
+    let type: HKWorkoutActivityType
+    
+    /// Duration of the workout session in seconds.
+    let duration: TimeInterval
+    
+    /// Active energy expenditure in kilocalories (kcal).
+    let calories: Double
+    
+    /// Total distance covered in meters (if applicable).
+    let distance: Double
+    
+    /// Start date and time of the workout.
+    let date: Date
+    
+    /// Indicates whether the workout was performed indoors.
+    let isIndoor: Bool
+    
+    /// Optional step count recorded specifically during the workout window.
+    var steps: Double?
+    
+    /// Localized human-readable activity name (e.g. "Laufen", "Krafttraining").
     var activityName: String {
         let name: String
         switch type {
@@ -101,6 +118,11 @@ struct Workout: Identifiable, Equatable {
 }
 
 extension HealthKitManager {
+    /// Queries the most recent workout sessions recorded in Apple HealthKit.
+    ///
+    /// - Parameters:
+    ///   - limit: Maximum number of workout records to return (defaults to 25).
+    ///   - completion: Receives parsed and sorted `Workout` models on the main thread.
     func fetchRecentWorkouts(limit: Int = 25, completion: @escaping ([Workout]) -> Void) {
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
         let query = HKSampleQuery(sampleType: .workoutType(), predicate: nil, limit: limit, sortDescriptors: [sortDescriptor]) { _, samples, error in

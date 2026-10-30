@@ -2,11 +2,19 @@ import SwiftUI
 import HealthKit
 import Charts
 
-// MARK: - Data Model for Charts
+// MARK: - Data Model for Swift Charts
+
+/// Discrete metric data point for time-series visualization in Swift Charts.
 struct ChartDataPoint: Identifiable, Equatable {
     let id = UUID()
+    
+    /// Timestamp corresponding to the beginning of the bucket interval.
     let date: Date
+    
+    /// Aggregated value (e.g. cumulative steps, active kcal, exercise minutes).
     let value: Double
+    
+    /// Category or metric type tag for grouping.
     let type: String 
     
     static func == (lhs: ChartDataPoint, rhs: ChartDataPoint) -> Bool {
@@ -14,10 +22,22 @@ struct ChartDataPoint: Identifiable, Equatable {
     }
 }
 
-// MARK: - HealthKit Extension for History
+// MARK: - HealthKit Historical Statistics Pipeline
+
 extension HealthKitManager {
     
-    // Fetch historical data for a given time range and interval
+    /// Fetches bucketed statistical time-series data for a given HealthKit quantity type.
+    ///
+    /// Implements a strict zero-filling enumeration across the requested range to prevent
+    /// gaps in Swift Charts rendering.
+    ///
+    /// - Parameters:
+    ///   - type: HealthKit quantity type identifier (e.g. `.stepCount`, `.activeEnergyBurned`).
+    ///   - startDate: Range start boundary.
+    ///   - endDate: Range end boundary.
+    ///   - interval: Bucket duration components (e.g. 1 hour for daily view, 1 day for week/month view).
+    ///   - unit: HealthKit target measurement unit.
+    ///   - completion: Closure returning ordered array of `ChartDataPoint` samples.
     func fetchStatistics(
         for type: HKQuantityTypeIdentifier,
         startDate: Date,

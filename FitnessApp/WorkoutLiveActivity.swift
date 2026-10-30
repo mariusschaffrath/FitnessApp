@@ -2,19 +2,28 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
+/// ActivityKit descriptor defining dynamic and static attributes for workout Live Activities.
 nonisolated struct WorkoutAttributes: ActivityAttributes, Sendable {
+    /// Dynamic state updated in real-time during an ongoing workout session.
     public struct ContentState: Codable, Hashable, Sendable {
-        // Dynamische Daten, die sich während des Workouts ändern
+        /// Current real-time heart rate in beats per minute (BPM).
         var currentHeartRate: Int
+        
+        /// Active calories burned so far in kcal.
         var caloriesBurned: Int
+        
+        /// Elapsed workout duration in seconds.
         var elapsedTime: TimeInterval
     }
 
-    // Statische Daten, die beim Start festgelegt werden
+    /// Static workout display name (e.g. "Outdoor Run", "Krafttraining").
     var workoutName: String
+    
+    /// SF Symbol icon identifying the workout type.
     var workoutIcon: String
 }
 
+/// ActivityKit widget rendering Live Activities across Lockscreen banners and Dynamic Island.
 struct WorkoutLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: WorkoutAttributes.self) { context in

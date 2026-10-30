@@ -5,6 +5,7 @@ import ActivityKit
 import WidgetKit
 import CoreLocation
 
+/// Specific errors that can occur during HealthKit interaction.
 enum HealthKitError: Error, LocalizedError {
     case notAvailable
     case unauthorized
@@ -17,23 +18,47 @@ enum HealthKitError: Error, LocalizedError {
     }
 }
 
+/// Central singleton manager orchestrating HealthKit permissions, live telemetry queries,
+/// background observers, and ActivityKit Live Activities.
 class HealthKitManager: ObservableObject {
+    /// Shared singleton instance for application-wide HealthKit access.
     static let shared = HealthKitManager()
+    
+    /// Underlying Apple HealthKit data store.
     let healthStore = HKHealthStore()
     
+    /// Indicates whether the user has granted read/write permissions for requested health types.
     @Published var isAuthorized = false
+    
+    /// Timestamp of the most recent successful data sync from HealthKit.
     @Published var lastSyncDate: Date?
+    
+    /// User-facing error message when HealthKit interactions fail.
     @Published var syncErrorMessage: String?
+    
+    /// Indicates whether an active synchronization cycle is currently in progress.
     @Published var isSyncing = false
     
-    // --- HEUTIGE AKTIVITÄT (Zentral für die UI) ---
+    // MARK: - Today's Live Activity Metrics (Core UI State)
+    
+    /// Cumulative step count for today (00:00 to now).
     @Published var todaySteps: Double = 0
+    
+    /// Active energy burned in kilocalories (kcal) for today.
     @Published var todayCalories: Double = 0
+    
+    /// Exercise time in minutes for today.
     @Published var todayExercise: Double = 0
+    
+    /// Number of hours in which the user stood and moved for at least one minute.
     @Published var todayStand: Double = 0
+    
+    /// Chronological list of recently completed workouts.
     @Published var recentWorkouts: [Workout] = []
     
-    // Live Activity Tracking
+    // MARK: - Live Activity Tracking
+    
+    /// Currently active ActivityKit workout session displayed in Dynamic Island and Lockscreen.
     @Published var activeActivity: Activity<WorkoutAttributes>?
     private var timer: AnyCancellable?
     
@@ -41,6 +66,7 @@ class HealthKitManager: ObservableObject {
         checkAuthorizationStatus()
     }
     
+    /// Verifies current authorization status against Apple HealthStore and refreshes data if permitted.
     func checkAuthorizationStatus() {
         let shareType = HKObjectType.workoutType()
         let status = healthStore.authorizationStatus(for: shareType)
@@ -57,6 +83,9 @@ class HealthKitManager: ObservableObject {
         }
     }
     
+    /// Requests read and share permissions from Apple HealthKit.
+    ///
+    /// - Parameter completion: Closure called with true if authorization was granted.
     func requestAuthorization(completion: @escaping (Bool) -> Void = { _ in }) {
         guard HKHealthStore.isHealthDataAvailable() else {
             self.syncErrorMessage = HealthKitError.notAvailable.localizedDescription
@@ -96,8 +125,13 @@ class HealthKitManager: ObservableObject {
         }
     }
     
-    // --- ROUTE FETCHING ---
+    // MARK: - Route Fetching (MapKit Integration)
     
+    /// Asynchronously retrieves GPS location series for outdoor workouts.
+    ///
+    /// - Parameters:
+    ///   - workout: The target workout object.
+    ///   - completion: Receives ordered array of CLLocation points for map rendering.
     func fetchRoute(for workout: Workout, completion: @escaping ([CLLocation]) -> Void) {
         let predicate = HKQuery.predicateForObject(with: workout.id)
         
@@ -124,9 +158,10 @@ class HealthKitManager: ObservableObject {
         healthStore.execute(query)
     }
     
-    // --- ZENTRALE REFRESH LOGIK ---
+    // MARK: - Data Synchronization
     private var lastRefreshTimestamp: Date = .distantPast
     
+    /// Refreshes all core activity metrics and workout history from HealthKit.
     @MainActor
     func refreshAllData(force: Bool = false) async {
         guard isAuthorized else { return }
